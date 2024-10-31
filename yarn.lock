@@ -11727,6 +11727,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"https-proxy-agent@npm:7.0.5":
+  version: 7.0.5
+  resolution: "https-proxy-agent@npm:7.0.5"
+  dependencies:
+    agent-base: ^7.0.2
+    debug: 4
+  checksum: 2e1a28960f13b041a50702ee74f240add8e75146a5c37fc98f1960f0496710f6918b3a9fe1e5aba41e50f58e6df48d107edd9c405c5f0d73ac260dabf2210857
+  languageName: node
+  linkType: hard
+
 "https-proxy-agent@npm:^5.0.0":
   version: 5.0.1
   resolution: "https-proxy-agent@npm:5.0.1"
@@ -13431,6 +13441,7 @@ __metadata:
     graphql-subscriptions: 2.0.0
     graphql-ws: 5.16.0
     hls.js: 1.5.8
+    https-proxy-agent: 7.0.5
     husky: 9.0.11
     kuromoji: 0.1.2
     kuroshiro: 1.2.0
@@ -13484,6 +13495,8 @@ __metadata:
     ws: 8.17.0
     yaml: 2.4.2
     youtube-player: 5.6.0
+  peerDependencies:
+    https-proxy-agent: "*"
   languageName: unknown
   linkType: soft
 

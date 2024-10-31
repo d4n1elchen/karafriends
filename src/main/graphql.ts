@@ -26,6 +26,7 @@ import { YoutubeAPI } from "./youtubeApi";
 
 import { JoysoundAPI, JoysoundCredentialsProvider } from "./joysoundApi";
 
+import { HttpsProxyAgent } from "https-proxy-agent";
 import "regenerator-runtime/runtime"; // tslint:disable-line:no-submodule-imports
 
 export interface IDataSources {
@@ -315,7 +316,7 @@ function saveDb() {
       songQueue: [db.currentSong, ...db.songQueue],
       downloadQueue: [],
     }),
-    "utf-8"
+    "utf-8",
   );
 }
 
@@ -359,18 +360,18 @@ interface WatchData {
 function hasMaxSongsInQueue(userIdentity: UserIdentity): boolean {
   // Not very efficient, but surely the queue won't ever get so big that this would be considered expensive
   const songsQueuedByUser: number = db.songQueue.filter(
-    (x) => x.userIdentity.deviceId === userIdentity.deviceId
+    (x) => x.userIdentity.deviceId === userIdentity.deviceId,
   ).length;
 
   const songsDownloadingByUser: number = db.downloadQueue.filter(
-    (x) => x.userIdentity.deviceId === userIdentity.deviceId
+    (x) => x.userIdentity.deviceId === userIdentity.deviceId,
   ).length;
 
   console.log(
-    `hasMaxSongsInQueue: user ${userIdentity.nickname} has ${songsQueuedByUser}, ${songsDownloadingByUser} downloading`
+    `hasMaxSongsInQueue: user ${userIdentity.nickname} has ${songsQueuedByUser}, ${songsDownloadingByUser} downloading`,
   );
   console.log(
-    `adminNicks=${karafriendsConfig.adminNicks}, adminDeviceIds=${karafriendsConfig.adminDeviceIds}`
+    `adminNicks=${karafriendsConfig.adminNicks}, adminDeviceIds=${karafriendsConfig.adminDeviceIds}`,
   );
 
   return (
@@ -391,7 +392,7 @@ function canPushToHeadOfQueue(userIdentity: UserIdentity): boolean {
 
 function pushSongToQueue(
   queueItem: QueueItem,
-  pushToHead: boolean = false
+  pushToHead: boolean = false,
 ): QueueSongResult {
   const eta =
     (db.currentSong?.playtime || 0) +
@@ -399,8 +400,8 @@ function pushSongToQueue(
 
   console.log(
     `pushSongToQueue: pushing ${JSON.stringify(
-      queueItem
-    )} with an eta of ${eta}; pushToHead=${pushToHead}`
+      queueItem,
+    )} with an eta of ${eta}; pushToHead=${pushToHead}`,
   );
 
   if (pushToHead === true) {
@@ -481,7 +482,7 @@ const resolvers = {
           url: karafriendsConfig.useLowBitrateUrl
             ? info.lowBitrateUrl
             : info.highBitrateUrl,
-        }))
+        })),
       );
     },
     scoringData(parent: SongParent, _: any, { dataSources }: IDataSources) {
@@ -506,7 +507,7 @@ const resolvers = {
     songs(
       parent: ArtistParent,
       args: { first: number | null; after: string | null },
-      { dataSources }: IDataSources
+      { dataSources }: IDataSources,
     ) {
       const firstInt = args.first || 0;
       const afterInt = args.after ? parseInt(args.after, 10) : 0;
@@ -542,7 +543,7 @@ const resolvers = {
             url: karafriendsConfig.useLowBitrateUrl
               ? info.lowBitrateUrl
               : info.highBitrateUrl,
-          }))
+          })),
         );
     },
     scoringData(parent: DamQueueItem, _: any, { dataSources }: IDataSources) {
@@ -558,7 +559,7 @@ const resolvers = {
     joysoundSongDetail: (
       _: any,
       args: { id: string },
-      { dataSources }: IDataSources
+      { dataSources }: IDataSources,
     ): Promise<JoysoundSongParent> => {
       return dataSources.joysound.getSongDetail(args.id).then((data) => ({
         id: args.id,
@@ -568,7 +569,7 @@ const resolvers = {
     joysoundSongsByArtist: (
       _: any,
       args: { artistId: string; first: number | null; after: string | null },
-      { dataSources }: IDataSources
+      { dataSources }: IDataSources,
     ): Promise<Connection<JoysoundSongParent, string>> => {
       const firstInt = args.first || 100;
       const afterInt = args.after ? parseInt(args.after, 10) : 1;
@@ -595,7 +596,7 @@ const resolvers = {
     joysoundSongsByKeyword: (
       _: any,
       args: { keyword: string; first: number | null; after: string | null },
-      { dataSources }: IDataSources
+      { dataSources }: IDataSources,
     ): Promise<Connection<JoysoundSongParent, string>> => {
       const firstInt = args.first || 100;
       const afterInt = args.after ? parseInt(args.after, 10) : 1;
@@ -622,7 +623,7 @@ const resolvers = {
     joysoundArtistsByKeyword: (
       _: any,
       args: { keyword: string; first: number | null; after: string | null },
-      { dataSources }: IDataSources
+      { dataSources }: IDataSources,
     ): Promise<Connection<JoysoundArtistParent, string>> => {
       const firstInt = args.first || 100;
       const afterInt = args.after ? parseInt(args.after, 10) : 1;
@@ -648,7 +649,7 @@ const resolvers = {
     songsByName: (
       _: any,
       args: { name: string; first: number | null; after: string | null },
-      { dataSources }: IDataSources
+      { dataSources }: IDataSources,
     ): Promise<Connection<SongParent, string>> => {
       const firstInt = args.first || 0;
       const afterInt = args.after ? parseInt(args.after, 10) : 0;
@@ -677,7 +678,7 @@ const resolvers = {
     songById: (
       _: any,
       args: { id: string },
-      { dataSources }: IDataSources
+      { dataSources }: IDataSources,
     ): Promise<SongParent> =>
       dataSources.dkwebsys.getMusicDetailsInfo(args.id).then((data) => ({
         id: args.id,
@@ -707,7 +708,7 @@ const resolvers = {
     artistsByName: (
       _: any,
       args: { name: string; first: number | null; after: string | null },
-      { dataSources }: IDataSources
+      { dataSources }: IDataSources,
     ): Promise<Connection<ArtistParent, string>> => {
       const firstInt = args.first || 0;
       const afterInt = args.after ? parseInt(args.after, 10) : 0;
@@ -735,7 +736,7 @@ const resolvers = {
     artistById: (
       _: any,
       args: { id: string; first: number | null; after: string | null },
-      { dataSources }: IDataSources
+      { dataSources }: IDataSources,
     ): Promise<ArtistParent> => {
       const firstInt = args.first || 0;
       const afterInt = args.after ? parseInt(args.after, 10) : 0;
@@ -764,7 +765,7 @@ const resolvers = {
     },
     songHistory: (
       _: any,
-      args: { first: number | null; after: string | null }
+      args: { first: number | null; after: string | null },
     ): Connection<SongHistoryItem, string> => {
       const firstInt = args.first || 0;
       const afterInt = args.after ? parseInt(args.after, 10) : 0;
@@ -787,7 +788,7 @@ const resolvers = {
     youtubeVideoInfo: (
       _: any,
       args: { videoId: string },
-      { dataSources }: IDataSources
+      { dataSources }: IDataSources,
     ): Promise<YoutubeVideoInfoResult> => {
       return dataSources.youtube.getVideoInfo(args.videoId).then((data) => {
         if (data.playabilityStatus.status !== "OK") {
@@ -808,7 +809,7 @@ const resolvers = {
                 code: captionTrack.languageCode,
                 name: captionTrack.name.simpleText,
               });
-            }
+            },
           );
         }
 
@@ -830,7 +831,7 @@ const resolvers = {
     },
     nicoVideoInfo: async (
       _: any,
-      args: { videoId: string }
+      args: { videoId: string },
     ): Promise<NicoVideoInfoResult> => {
       try {
         // @ts-ignore
@@ -860,13 +861,13 @@ const resolvers = {
         videoDownloadType: number;
         songId: string;
         suffix: string | null;
-      }
+      },
     ): VideoDownloadProgress => {
       const progress = getVideoDownloadProgress(
         db.downloadQueue,
         args.videoDownloadType,
         args.songId,
-        args.suffix
+        args.suffix,
       );
 
       return { progress };
@@ -880,7 +881,7 @@ const resolvers = {
     queueJoysoundSong: (
       _: any,
       args: { input: QueueJoysoundSongInput; tryHeadOfQueue: boolean },
-      { dataSources }: IDataSources
+      { dataSources }: IDataSources,
     ): QueueSongResult => {
       const queueItem: JoysoundQueueItem = {
         __typename: "JoysoundQueueItem",
@@ -905,7 +906,7 @@ const resolvers = {
         dataSources.joysound,
         queueItem,
         pushToHead,
-        pushSongToQueue
+        pushSongToQueue,
       );
 
       return {
@@ -916,7 +917,7 @@ const resolvers = {
     queueDamSong: (
       _: any,
       args: { input: QueueDamSongInput; tryHeadOfQueue: boolean },
-      { dataSources }: IDataSources
+      { dataSources }: IDataSources,
     ): QueueSongResult => {
       const queueItem: DamQueueItem = {
         timestamp: Date.now().toString(),
@@ -951,7 +952,7 @@ const resolvers = {
     },
     queueYoutubeSong: (
       _: any,
-      args: { input: QueueYoutubeSongInput; tryHeadOfQueue: boolean }
+      args: { input: QueueYoutubeSongInput; tryHeadOfQueue: boolean },
     ): QueueSongResult => {
       const queueItem: YoutubeQueueItem = {
         timestamp: Date.now().toString(),
@@ -975,7 +976,7 @@ const resolvers = {
 
       if (args.input.adhocSongLyrics) {
         db.idToAdhocLyrics[args.input.songId] = cleanupAdhocSongLyrics(
-          args.input.adhocSongLyrics
+          args.input.adhocSongLyrics,
         );
       }
 
@@ -984,7 +985,7 @@ const resolvers = {
         queueItem.userIdentity,
         args.input.songId,
         args.input.captionCode,
-        pushSongToQueue.bind(null, queueItem, pushToHead)
+        pushSongToQueue.bind(null, queueItem, pushToHead),
       );
 
       // The song likely hasn't actually been added to the queue yet since it needs to download,
@@ -998,7 +999,7 @@ const resolvers = {
     },
     queueNicoSong: (
       _: any,
-      args: { input: QueueNicoSongInput; tryHeadOfQueue: boolean }
+      args: { input: QueueNicoSongInput; tryHeadOfQueue: boolean },
     ): QueueSongResult => {
       const queueItem: NicoQueueItem = {
         timestamp: Date.now().toString(),
@@ -1021,7 +1022,7 @@ const resolvers = {
         db.downloadQueue,
         queueItem.userIdentity,
         args.input.songId,
-        pushSongToQueue.bind(null, queueItem, pushToHead)
+        pushSongToQueue.bind(null, queueItem, pushToHead),
       );
       // The song likely hasn't actually been added to the queue yet since it needs to download,
       // but let's optimistically return the eta assuming it will successfully queue
@@ -1034,7 +1035,7 @@ const resolvers = {
     },
     pushAdhocLyrics: (
       _: any,
-      args: { input: PushAdhocLyricsInput }
+      args: { input: PushAdhocLyricsInput },
     ): boolean => {
       db.currentSongAdhocLyrics.push({
         lyric: args.input.lyric,
@@ -1093,11 +1094,11 @@ const resolvers = {
     },
     removeSong: (
       _: any,
-      args: { songId: string; timestamp: string }
+      args: { songId: string; timestamp: string },
     ): boolean => {
       const songIdx = db.songQueue.findIndex(
         (item) =>
-          item.songId === args.songId && item.timestamp === args.timestamp
+          item.songId === args.songId && item.timestamp === args.timestamp,
       );
       db.songQueue.splice(songIdx, 1);
       pubsub.publish(SubscriptionEvent.QueueChanged, {
@@ -1118,7 +1119,7 @@ const resolvers = {
     },
     setPlaybackState: (
       _: any,
-      args: { playbackState: PlaybackState }
+      args: { playbackState: PlaybackState },
     ): boolean => {
       db.playbackState = args.playbackState;
       pubsub.publish(SubscriptionEvent.PlaybackStateChanged, {
@@ -1165,7 +1166,8 @@ const schema = makeExecutableSchema({
 export function applyGraphQLMiddleware(
   app: Application,
   minseiCredsProvider: MinseiCredentialsProvider,
-  joysoundCredsProvider: JoysoundCredentialsProvider
+  joysoundCredsProvider: JoysoundCredentialsProvider,
+  proxyAgent?: HttpsProxyAgent<string>,
 ) {
   const httpServer = createServer(app);
 
@@ -1181,7 +1183,7 @@ export function applyGraphQLMiddleware(
   const server = new ApolloServer({
     dataSources: () => ({
       minsei: new MinseiAPI(minseiCredsProvider),
-      joysound: new JoysoundAPI(joysoundCredsProvider),
+      joysound: new JoysoundAPI(joysoundCredsProvider, proxyAgent),
       dkwebsys: new DkwebsysAPI(),
       youtube: new YoutubeAPI(),
     }),
@@ -1215,7 +1217,7 @@ export function applyGraphQLMiddleware(
     server.applyMiddleware({ app });
     httpServer.listen(karafriendsConfig.remoconPort, () => {
       console.log(
-        `Server is now running on http://localhost:${karafriendsConfig.remoconPort}`
+        `Server is now running on http://localhost:${karafriendsConfig.remoconPort}`,
       );
     });
   });

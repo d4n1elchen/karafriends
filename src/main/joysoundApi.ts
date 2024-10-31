@@ -1,4 +1,5 @@
 import { RESTDataSource } from "apollo-datasource-rest";
+import { HttpsProxyAgent } from "https-proxy-agent";
 import fetch from "node-fetch";
 import invariant from "ts-invariant";
 
@@ -116,12 +117,17 @@ function unescapeJoysoundString(str: string) {
 
 export class JoysoundAPI extends RESTDataSource {
   credsProvider: JoysoundCredentialsProvider;
+  proxyAgent?: HttpsProxyAgent<string>;
 
-  constructor(credsProvider: JoysoundCredentialsProvider) {
+  constructor(
+    credsProvider: JoysoundCredentialsProvider,
+    proxyAgent?: HttpsProxyAgent<string>,
+  ) {
     super();
 
     this.baseURL = "https://www.sound-cafe.jp";
     this.credsProvider = credsProvider;
+    this.proxyAgent = proxyAgent;
   }
 
   async post<T>(url: string, data: object): Promise<T> {
@@ -148,6 +154,7 @@ export class JoysoundAPI extends RESTDataSource {
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/112.0",
         "X-CSRF-TOKEN": creds.csrfToken,
       },
+      agent: this.proxyAgent,
     });
   }
 
@@ -177,7 +184,10 @@ export class JoysoundAPI extends RESTDataSource {
     const data = await this.get(
       `songdetail/${id}`,
       {},
-      { headers: { Cookie: generateCookieString(creds.cookies) } },
+      {
+        headers: { Cookie: generateCookieString(creds.cookies) },
+        agent: this.proxyAgent,
+      },
     );
 
     const re = new RegExp(
@@ -245,7 +255,11 @@ export class JoysoundAPI extends RESTDataSource {
     });
   }
 
-  static async login(email: string, password: string) {
+  static async login(
+    email: string,
+    password: string,
+    proxyAgent?: HttpsProxyAgent<string>,
+  ) {
     const loginCookies: JoysoundCookies = {
       AWSALB: "",
       AWSALBCORS: "",
@@ -257,6 +271,7 @@ export class JoysoundAPI extends RESTDataSource {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/112.0",
       },
+      agent: proxyAgent,
     })
       .then((resp) => {
         const setCookie = resp.headers.get("set-cookie");
@@ -288,6 +303,7 @@ export class JoysoundAPI extends RESTDataSource {
         "X-CSRF-TOKEN": csrfToken,
         "X-Requested-With": "XMLHttpRequest",
       },
+      agent: proxyAgent,
     })
       .then((resp) => {
         const setCookie = resp.headers.get("set-cookie");
@@ -307,6 +323,7 @@ export class JoysoundAPI extends RESTDataSource {
               "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/112.0",
           },
           redirect: "manual",
+          agent: proxyAgent,
         });
       })
       .then((resp) => {
@@ -321,6 +338,7 @@ export class JoysoundAPI extends RESTDataSource {
             "User-Agent":
               "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/112.0",
           },
+          agent: proxyAgent,
         });
       })
       .then((resp) => {

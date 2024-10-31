@@ -25,6 +25,7 @@ import isDev from "electron-is-dev";
 import express from "express";
 import { memoize } from "lodash";
 
+import { HttpsProxyAgent } from "https-proxy-agent";
 import karafriendsConfig from "../common/config";
 import { TEMP_FOLDER } from "./../common/videoDownloader";
 import { MinseiAPI } from "./damApi";
@@ -63,12 +64,14 @@ async function minseiCredentialsProvider() {
   };
 }
 
-async function joysoundCredentialsProvider() {
+async function joysoundCredentialsProvider(
+  proxyAgent?: HttpsProxyAgent<string>,
+) {
   const joysoundEmail = encodeURIComponent(karafriendsConfig.joysoundEmail);
   const joysoundPassword = encodeURIComponent(
     karafriendsConfig.joysoundPassword,
   );
-  return JoysoundAPI.login(joysoundEmail, joysoundPassword);
+  return JoysoundAPI.login(joysoundEmail, joysoundPassword, proxyAgent);
 }
 
 let rendererWindow: BrowserWindow | null;
@@ -135,11 +138,24 @@ function createWindow() {
 
   expressApp.use(compression());
 
-  applyGraphQLMiddleware(
-    expressApp,
-    memoize(minseiCredentialsProvider),
-    memoize(joysoundCredentialsProvider),
-  );
+  if (karafriendsConfig.proxyEnable) {
+    const { proxyURL, proxyUser, proxyPass } = karafriendsConfig;
+    const proxyAgent = new HttpsProxyAgent(
+      `http://${proxyUser}:${proxyPass}@${proxyURL}`,
+    );
+    applyGraphQLMiddleware(
+      expressApp,
+      memoize(minseiCredentialsProvider),
+      memoize(joysoundCredentialsProvider.bind(null, proxyAgent)),
+      proxyAgent,
+    );
+  } else {
+    applyGraphQLMiddleware(
+      expressApp,
+      memoize(minseiCredentialsProvider),
+      memoize(joysoundCredentialsProvider),
+    );
+  }
 
   expressApp.use(remoconServiceWorkerAllowed());
 

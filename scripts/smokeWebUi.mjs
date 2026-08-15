@@ -58,6 +58,17 @@ try {
   await page.click("button.btn-large");
   await page.waitForSelector("video.karaVid");
   await page.waitForSelector("canvas.qrcode");
+  const playerLayout = await page.evaluate(() => ({
+    pageWidth: document.body.scrollWidth,
+    sidebarWidth: document.querySelector(".appSidebar").clientWidth,
+    viewportWidth: window.innerWidth,
+  }));
+  assert.ok(playerLayout.sidebarWidth >= 250, "sidebar should remain readable");
+  assert.equal(
+    playerLayout.pageWidth,
+    playerLayout.viewportWidth,
+    "player layout should not overflow horizontally",
+  );
 
   const noAudioWorkletPage = await browser.newPage();
   monitorTelemetry(noAudioWorkletPage);

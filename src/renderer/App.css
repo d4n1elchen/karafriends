@@ -1,6 +1,8 @@
 .appMainContainer {
-  width: 100%;
-  height: 100%;
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
   overflow: hidden;
 }
 
@@ -10,9 +12,70 @@
   height: 100%;
 }
 
+.appPlayer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .appSidebar {
   display: flex;
+  flex: 0 0 clamp(18rem, 20vw, 24rem);
   flex-direction: column;
+  width: clamp(18rem, 20vw, 24rem);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.appSidebar .qrcode {
+  align-self: center;
+  max-width: 20rem;
+  flex: 0 1 auto;
+}
+
+.appSidebar nav {
+  flex: 0 0 auto;
+  height: 3.5rem;
+  line-height: 3.5rem;
+  font-size: 1.25rem;
+}
+
+.appSettings {
+  flex: 0 0 auto;
+  width: 100%;
+  padding: 1rem 1.25rem !important;
+}
+
+.appSettings .input-field,
+.appSettings select {
+  width: 100%;
+}
+
+.appSettings .btn {
+  width: 100%;
+  height: auto;
+  min-height: 2.75rem;
+  margin-top: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.appSidebar .queueQueue {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  overflow-y: auto;
+}
+
+@media (max-height: 720px) {
+  .appSidebar .qrcode {
+    max-width: 12rem;
+  }
+
+  .appSettings {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
 }
 
 .browserStart {

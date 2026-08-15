@@ -114,12 +114,8 @@ function App(props: {
   };
 
   return (
-    <div className="appMainContainer black row">
-      <div
-        className={`appPlayer col ${
-          sidebarVisible ? "s11" : "s12"
-        } valign-wrapper`}
-      >
+    <div className="appMainContainer black">
+      <div className="appPlayer valign-wrapper">
         {started ? (
           <Player mics={mics} kuroshiro={props.kuroshiro} audio={props.audio} />
         ) : (
@@ -139,10 +135,10 @@ function App(props: {
         <Effects />
       </div>
       {sidebarVisible && (
-        <div className="appSidebar col s1 grey lighten-3">
+        <aside className="appSidebar grey lighten-3">
           <QRCode hostname={hostname} />
           <nav className="center-align">Settings</nav>
-          <div className="section center-align">
+          <div className="appSettings section center-align">
             <HostnameSetting hostname={hostname} onChange={setHostname} />
             {mics.map((mic, i) => (
               <MicrophoneSetting
@@ -161,7 +157,7 @@ function App(props: {
           </div>
           <nav className="center-align">Queue</nav>
           <Queue />
-        </div>
+        </aside>
       )}
     </div>
   );

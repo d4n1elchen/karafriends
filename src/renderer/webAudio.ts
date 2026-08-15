@@ -47,6 +47,12 @@ export default class KarafriendsAudio {
     this.gainNode.gain.value = gain;
   }
 
+  async resume(): Promise<void> {
+    if (this.audioContext.state === "suspended") {
+      await this.audioContext.resume();
+    }
+  }
+
   sink(): AudioNode {
     return this.vocoderNode || this.gainNode;
   }

@@ -6,6 +6,7 @@ import React from "react";
 import { createRoot } from "react-dom/client"; // tslint:disable-line:no-submodule-imports
 import { RelayEnvironmentProvider } from "react-relay";
 
+import "./browserBridge";
 import environment from "../common/graphqlEnvironment";
 import { KuroshiroSingleton } from "../common/joysoundParser";
 import App from "./App";

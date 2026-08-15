@@ -1,5 +1,4 @@
 import { execFile } from "child_process";
-import { app } from "electron"; // tslint:disable-line:no-implicit-dependencies
 import fs, { promises as fsp } from "fs";
 import os from "os";
 import path from "path";
@@ -7,6 +6,8 @@ import process from "process";
 import { promisify } from "util";
 
 import fetch, { Response as FetchResponse } from "node-fetch";
+import { getConfigDirectory } from "./config";
+import { getWebDataDirectory, isElectronRuntime } from "./runtimePaths";
 
 import {
   AssetPlan,
@@ -33,18 +34,25 @@ const execFileAsync = promisify(execFile);
 // The pure planning and decision logic lives in externalResourcesPlan.ts so it
 // can be unit tested across platforms without electron, the filesystem, or the
 // network; this module wires that plan up to the real side effects.
-const isDev = process.env.NODE_ENV === "development";
-
-const extractorDir = isDev
-  ? path.join(app.getAppPath(), "..", "..", "..", "extraResources")
-  : path.join(process.resourcesPath, "extraResources");
+const packagedResourcesPath = (
+  process as NodeJS.Process & { resourcesPath?: string }
+).resourcesPath;
+const extractorDir = process.env.KARAFRIENDS_EXTRA_RESOURCES_DIR
+  ? path.resolve(process.env.KARAFRIENDS_EXTRA_RESOURCES_DIR)
+  : packagedResourcesPath
+    ? path.join(packagedResourcesPath, "extraResources")
+    : path.resolve(process.cwd(), "extraResources");
 
 const extractorPath = path.join(
   extractorDir,
   extractorFileName(process.platform),
 );
 
-const cacheDir = path.join(app.getPath("userData"), "externalResources");
+const cacheDir = process.env.KARAFRIENDS_RESOURCE_DIR
+  ? path.resolve(process.env.KARAFRIENDS_RESOURCE_DIR)
+  : isElectronRuntime()
+    ? path.join(getConfigDirectory(), "externalResources")
+    : path.join(getWebDataDirectory(), "resources");
 const versionsFile = path.join(cacheDir, "versions.json");
 
 const resourcePaths: ResourcePaths = resourcePathsFor(

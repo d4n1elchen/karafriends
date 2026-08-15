@@ -1,7 +1,8 @@
-import { app } from "electron"; // tslint:disable-line:no-implicit-dependencies
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { parse, stringify } from "yaml";
+import { getWebDataDirectory, isElectronRuntime } from "./runtimePaths";
 
 export interface KarafriendsConfig {
   // Whether to use the low bitrate URLs for DAM songs
@@ -65,15 +66,31 @@ function applyEnvironmentOverrides(config: KarafriendsConfig) {
   return config;
 }
 
-function getConfig(): KarafriendsConfig {
-  // Refer to https://www.electronjs.org/docs/latest/api/app#appgetpathname
-  // for where the config file should be placed. On Windows, it should be %APPDATA%/karafriends/config.yaml
-  let config = DEFAULT_CONFIG;
+export function getConfigDirectory(): string {
+  if (process.env.KARAFRIENDS_CONFIG_DIR) {
+    return path.resolve(process.env.KARAFRIENDS_CONFIG_DIR);
+  }
 
-  const configFilepath: string = path.join(
-    app.getPath("userData"),
-    "config.yaml",
-  );
+  // Keep all standalone-server runtime data under the project data directory.
+  // Preserve the historical user-data location for Electron so existing
+  // desktop installs continue to find their configuration.
+  if (!isElectronRuntime()) {
+    return path.join(getWebDataDirectory(), "config");
+  }
+
+  const defaultConfigRoot =
+    process.platform === "win32"
+      ? process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming")
+      : process.platform === "darwin"
+        ? path.join(os.homedir(), "Library", "Application Support")
+        : process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+  return path.join(defaultConfigRoot, "karafriends");
+}
+
+function getConfig(): KarafriendsConfig {
+  let config = { ...DEFAULT_CONFIG };
+
+  const configFilepath: string = path.join(getConfigDirectory(), "config.yaml");
 
   console.log(`Checking ${configFilepath} for configs`);
 

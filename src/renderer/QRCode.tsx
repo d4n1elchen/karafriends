@@ -1,6 +1,7 @@
 import { toCanvas } from "qrcode";
 import React, { useEffect, useRef } from "react";
 
+import { getRoomId, roomUrl } from "../common/roomId";
 import "./QRCode.css";
 
 function QRCode(props: { hostname: string }) {
@@ -11,9 +12,12 @@ function QRCode(props: { hostname: string }) {
       if (!canvasRef.current) return;
 
       canvasRef.current.style.width = "100%";
+      const remoteUrl = window.karafriends?.isDesktop
+        ? `http://${props.hostname}/?room=${encodeURIComponent(getRoomId())}`
+        : roomUrl("/remocon/");
       toCanvas(
         canvasRef.current,
-        `http://${props.hostname}`,
+        remoteUrl,
         {
           errorCorrectionLevel: "L",
           width: canvasRef.current.clientWidth,
@@ -22,7 +26,7 @@ function QRCode(props: { hostname: string }) {
           if (error) {
             console.error(error);
           }
-        }
+        },
       );
     }
 

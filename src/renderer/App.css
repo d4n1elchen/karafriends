@@ -15,6 +15,10 @@
   flex-direction: column;
 }
 
+.browserStart {
+  margin: auto;
+}
+
 #toast-container {
   top: 0px;
   right: 10px;

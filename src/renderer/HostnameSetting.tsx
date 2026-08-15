@@ -8,19 +8,21 @@ export default function HostnameSetting(props: {
   hostname: string;
   onChange: (name: string) => void;
 }) {
-  const hostnameToValue = new Map([
-    ["offkai.karafriends.party", "offkai.karafriends.party"],
-    [
-      HOSTNAME,
-      `${HOSTNAME}:${window.karafriends.karafriendsConfig().remoconPort}`,
-    ],
-    ...window.karafriends
-      .ipAddresses()
-      .map((address): [string, string] => [
-        address,
-        `${address}:${window.karafriends.karafriendsConfig().remoconPort}`,
-      ]),
-  ]);
+  const hostnameToValue = window.karafriends.isDesktop
+    ? new Map([
+        ["offkai.karafriends.party", "offkai.karafriends.party"],
+        [
+          HOSTNAME,
+          `${HOSTNAME}:${window.karafriends.karafriendsConfig().remoconPort}`,
+        ],
+        ...window.karafriends
+          .ipAddresses()
+          .map((address): [string, string] => [
+            address,
+            `${address}:${window.karafriends.karafriendsConfig().remoconPort}`,
+          ]),
+      ])
+    : new Map([[window.location.host, window.location.host]]);
 
   const [currentValue, setCurrentValue] = useState(
     hostnameToValue.get(props.hostname),

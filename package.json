@@ -12,7 +12,16 @@
     "build-parcel-prod": "parcel build --dist-dir build/prod --public-url . --no-source-maps",
     "build-dev": "concurrently \"yarn get-external-resources && yarn build-native-dev\" \"yarn build-relay-dev\" && yarn build-parcel-dev",
     "build-prod": "concurrently \"yarn get-external-resources && yarn build-native-prod\" \"yarn build-relay-prod\" && yarn build-parcel-prod",
+    "build-web": "concurrently \"yarn get-external-resources\" \"yarn build-relay-prod\" && concurrently \"yarn build-web-clients\" \"yarn build-web-server\"",
+    "build-web-clients": "parcel build --target renderer --target remocon --dist-dir build/web --public-url . --no-source-maps",
+    "build-web-server": "parcel build --target web-server --dist-dir build/web --public-url . --no-source-maps",
     "run-dev": "cross-env NODE_ENV=development yarn _run-dev",
+    "run-web": "yarn build-web && yarn start-web",
+    "debug-web": "yarn build-web && yarn start-web-debug",
+    "start-web": "cross-env NODE_ENV=production node build/web/web-server/index.js",
+    "start-web-debug": "cross-env NODE_ENV=development KARAFRIENDS_DEBUG=1 node build/web/web-server/index.js",
+    "smoke:web": "node scripts/smokeWebRooms.mjs",
+    "smoke:web-ui": "node scripts/smokeWebUi.mjs",
     "_run-dev": "yarn build-dev && concurrently --success !command-0 --kill-others \"parcel serve --target remocon --target renderer --dist-dir build/dev --port 3000\" \"wait-on http://127.0.0.1:3000/ && node electron.js build/dev/main_/index.js\"",
     "package-prod": "node ./packager.js",
     "get-external-resources": "node scripts/getExternalResources.mjs",
@@ -202,6 +211,12 @@
     "remocon": {
       "source": "src/remocon/index.html",
       "context": "browser"
+    },
+    "web-server": {
+      "source": "src/server/index.ts",
+      "context": "node",
+      "includeNodeModules": false,
+      "outputFormat": "commonjs"
     }
   },
   "@parcel/bundler-default": {

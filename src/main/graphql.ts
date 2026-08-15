@@ -17,10 +17,7 @@ import { type FetcherRequestInit } from "@apollo/utils.fetcher";
 // tslint:disable-next-line:no-submodule-imports
 import { expressMiddleware } from "@as-integrations/express5";
 import { makeExecutableSchema } from "@graphql-tools/schema";
-// tslint:disable-next-line:no-implicit-dependencies
-import { app as electronApp, dialog } from "electron";
-import isDev from "electron-is-dev";
-import express, { Application } from "express";
+import express, { Application, Request } from "express";
 import { PubSub } from "graphql-subscriptions";
 import { useServer } from "graphql-ws/use/ws"; // tslint:disable-line:no-submodule-imports
 import { Nicovideo } from "niconico";
@@ -31,6 +28,8 @@ import { Innertube } from "youtubei.js";
 // tslint:disable-next-line:no-submodule-imports no-implicit-dependencies
 import rawSchema from "inline-string:../common/schema.graphql";
 import karafriendsConfig, { KarafriendsConfig } from "../common/config";
+import { debugError } from "../common/debug";
+import { normalizeRoomId } from "../common/roomIdCore";
 import {
   downloadDamVideo,
   downloadJoysoundData,
@@ -45,13 +44,14 @@ import { JoysoundAPI, JoysoundCredentialsProvider } from "./joysoundApi";
 import { memoize } from "lodash";
 import "regenerator-runtime/runtime"; // tslint:disable-line:no-submodule-imports
 
-export interface IDataSources {
+export interface IGraphQLContext {
   dataSources: {
     minsei: MinseiAPI;
     joysound: JoysoundAPI;
     dkwebsys: DkwebsysAPI;
     youtube: Innertube;
   };
+  room: RoomRuntime;
 }
 
 interface JoysoundSongParent {
@@ -279,7 +279,7 @@ interface VideoDownloadProgress {
   progress: number;
 }
 
-type NotARealDb = {
+export type RoomDatabase = {
   currentSong: QueueItem | null;
   currentSongAdhocLyrics: AdhocLyricsEntry[];
   idToAdhocLyrics: Record<string, string[]>;
@@ -300,48 +300,15 @@ enum SubscriptionEvent {
   QueueChanged = "QueueChanged",
 }
 
-// TODO: make this gql context instead of global
-let db: NotARealDb = {
-  currentSong: null,
-  currentSongAdhocLyrics: [],
-  idToAdhocLyrics: {},
-  pitchShiftSemis: 0,
-  playbackState: PlaybackState.WAITING,
-  songQueue: [],
-  downloadQueue: [],
-  songHistory: [],
-};
-
-const DB_PATH = path.resolve(TEMP_FOLDER, "queue.json");
-
-// TODO: write a db interface and call these from within mutating methods instead of at their call sites
-function saveDb() {
-  try {
-    if (!fs.existsSync(TEMP_FOLDER)) {
-      fs.mkdirSync(TEMP_FOLDER, { recursive: true });
-    }
-    const serialized = JSON.stringify({
-      ...db,
-      pitchShiftSemis: 0,
-      currentSong: null,
-      currentSongAdhocLyrics: [],
-      songQueue: [db.currentSong, ...db.songQueue],
-      downloadQueue: [],
-    });
-    // Write to a temp file and rename into place so an interrupted write can
-    // never leave a half-written queue.json that fails to parse on next launch.
-    const tmpPath = `${DB_PATH}.tmp`;
-    fs.writeFileSync(tmpPath, serialized, "utf-8");
-    fs.renameSync(tmpPath, DB_PATH);
-  } catch (err) {
-    // A failed persist shouldn't take down the app; the in-memory queue is
-    // still intact and will be retried on the next mutation.
-    console.error(`Failed to persist queue to ${DB_PATH}:`, err);
-  }
+export interface RoomRuntime {
+  id: string;
+  db: RoomDatabase;
+  dbPath: string;
+  pubsub: PubSub;
 }
 
-function loadDb(): NotARealDb {
-  const defaults: NotARealDb = {
+function defaultDatabase(): RoomDatabase {
+  return {
     currentSong: null,
     currentSongAdhocLyrics: [],
     idToAdhocLyrics: {},
@@ -351,29 +318,76 @@ function loadDb(): NotARealDb {
     downloadQueue: [],
     songHistory: [],
   };
-  if (!fs.existsSync(DB_PATH)) {
+}
+
+const rooms = new Map<string, RoomRuntime>();
+
+export function getRoom(roomIdValue: unknown): RoomRuntime {
+  const id = normalizeRoomId(roomIdValue);
+  const existing = rooms.get(id);
+  if (existing) return existing;
+
+  const dbPath =
+    id === "main"
+      ? path.resolve(TEMP_FOLDER, "queue.json")
+      : path.resolve(TEMP_FOLDER, "rooms", id, "queue.json");
+  const room: RoomRuntime = {
+    id,
+    db: loadDb(dbPath),
+    dbPath,
+    pubsub: new PubSub(),
+  };
+  rooms.set(id, room);
+  return room;
+}
+
+// TODO: write a db interface and call these from within mutating methods instead of at their call sites
+function saveDb(room: RoomRuntime) {
+  try {
+    fs.mkdirSync(path.dirname(room.dbPath), { recursive: true });
+    const serialized = JSON.stringify({
+      ...room.db,
+      pitchShiftSemis: 0,
+      currentSong: null,
+      currentSongAdhocLyrics: [],
+      songQueue: [room.db.currentSong, ...room.db.songQueue].filter(Boolean),
+      downloadQueue: [],
+    });
+    // Write to a temp file and rename into place so an interrupted write can
+    // never leave a half-written queue.json that fails to parse on next launch.
+    const tmpPath = `${room.dbPath}.tmp`;
+    fs.writeFileSync(tmpPath, serialized, "utf-8");
+    fs.renameSync(tmpPath, room.dbPath);
+  } catch (err) {
+    // A failed persist shouldn't take down the app; the in-memory queue is
+    // still intact and will be retried on the next mutation.
+    console.error(`Failed to persist room ${room.id} queue:`, err);
+  }
+}
+
+function loadDb(dbPath: string): RoomDatabase {
+  const defaults = defaultDatabase();
+  if (!fs.existsSync(dbPath)) {
     return defaults;
   }
   try {
-    return { ...defaults, ...JSON.parse(fs.readFileSync(DB_PATH, "utf-8")) };
+    return { ...defaults, ...JSON.parse(fs.readFileSync(dbPath, "utf-8")) };
   } catch (err) {
     // A corrupt or partially-written queue.json (e.g. an interrupted save or a
     // power loss mid-party) previously threw here at startup, bricking every
     // launch. Preserve the bad file for debugging and start from a clean state.
     console.error(
-      `Failed to load saved queue from ${DB_PATH}; ignoring it:`,
+      `Failed to load saved queue from ${dbPath}; ignoring it:`,
       err,
     );
     try {
-      fs.renameSync(DB_PATH, `${DB_PATH}.corrupt`);
+      fs.renameSync(dbPath, `${dbPath}.corrupt`);
     } catch (renameErr) {
       console.error("Failed to back up corrupt queue file:", renameErr);
     }
     return defaults;
   }
 }
-
-const pubsub = new PubSub();
 
 const nicovideo = new Nicovideo();
 
@@ -395,13 +409,16 @@ interface WatchData {
   };
 }
 
-function hasMaxSongsInQueue(userIdentity: UserIdentity): boolean {
+function hasMaxSongsInQueue(
+  room: RoomRuntime,
+  userIdentity: UserIdentity,
+): boolean {
   // Not very efficient, but surely the queue won't ever get so big that this would be considered expensive
-  const songsQueuedByUser: number = db.songQueue.filter(
+  const songsQueuedByUser: number = room.db.songQueue.filter(
     (x) => x.userIdentity.deviceId === userIdentity.deviceId,
   ).length;
 
-  const songsDownloadingByUser: number = db.downloadQueue.filter(
+  const songsDownloadingByUser: number = room.db.downloadQueue.filter(
     (x) => x.userIdentity.deviceId === userIdentity.deviceId,
   ).length;
 
@@ -429,12 +446,13 @@ function canPushToHeadOfQueue(userIdentity: UserIdentity): boolean {
 }
 
 function pushSongToQueue(
+  room: RoomRuntime,
   queueItem: QueueItem,
   pushToHead: boolean = false,
 ): QueueSongResult {
   const eta =
-    (db.currentSong?.playtime || 0) +
-    db.songQueue.reduce((acc, cur) => acc + (cur.playtime || 0), 0);
+    (room.db.currentSong?.playtime || 0) +
+    room.db.songQueue.reduce((acc, cur) => acc + (cur.playtime || 0), 0);
 
   console.log(
     `pushSongToQueue: pushing ${JSON.stringify(
@@ -445,23 +463,23 @@ function pushSongToQueue(
   if (pushToHead === true) {
     // To give things time to download, we don't actually push to the front, but the second.
     // Due to :js:, this is OK regardless of the size of db.songQueue
-    db.songQueue.splice(1, 0, queueItem);
+    room.db.songQueue.splice(1, 0, queueItem);
   } else {
-    db.songQueue.push(queueItem);
+    room.db.songQueue.push(queueItem);
   }
 
-  pubsub.publish(SubscriptionEvent.QueueChanged, {
+  room.pubsub.publish(SubscriptionEvent.QueueChanged, {
     queueChanged: {
-      currentSong: db.currentSong,
-      newQueue: db.songQueue,
+      currentSong: room.db.currentSong,
+      newQueue: room.db.songQueue,
     },
   });
 
-  pubsub.publish(SubscriptionEvent.QueueAdded, {
+  room.pubsub.publish(SubscriptionEvent.QueueAdded, {
     queueAdded: queueItem,
   });
 
-  saveDb();
+  saveDb(room);
 
   return {
     __typename: "QueueSongInfo",
@@ -514,7 +532,11 @@ const resolvers = {
     playtime(parent: SongParent) {
       return parent.playtime || null;
     },
-    streamingUrls(parent: SongParent, _: any, { dataSources }: IDataSources) {
+    streamingUrls(
+      parent: SongParent,
+      _: any,
+      { dataSources }: IGraphQLContext,
+    ) {
       return dataSources.minsei.getMusicStreamingUrls(parent.id).then((data) =>
         data.list.map((info) => ({
           url: karafriendsConfig.useLowBitrateUrl
@@ -523,7 +545,7 @@ const resolvers = {
         })),
       );
     },
-    scoringData(parent: SongParent, _: any, { dataSources }: IDataSources) {
+    scoringData(parent: SongParent, _: any, { dataSources }: IGraphQLContext) {
       return dataSources.minsei
         .getScoringData(parent.id)
         .then((data) => Array.from(new Uint8Array(data)));
@@ -545,7 +567,7 @@ const resolvers = {
     songs(
       parent: ArtistParent,
       args: { first: number | null; after: string | null },
-      { dataSources }: IDataSources,
+      { dataSources }: IGraphQLContext,
     ) {
       const firstInt = args.first || 0;
       const afterInt = args.after ? parseInt(args.after, 10) : 0;
@@ -573,7 +595,11 @@ const resolvers = {
     },
   },
   DamQueueItem: {
-    streamingUrls(parent: DamQueueItem, _: any, { dataSources }: IDataSources) {
+    streamingUrls(
+      parent: DamQueueItem,
+      _: any,
+      { dataSources }: IGraphQLContext,
+    ) {
       return dataSources.minsei
         .getMusicStreamingUrls(parent.songId)
         .then((data) =>
@@ -584,20 +610,28 @@ const resolvers = {
           })),
         );
     },
-    scoringData(parent: DamQueueItem, _: any, { dataSources }: IDataSources) {
+    scoringData(
+      parent: DamQueueItem,
+      _: any,
+      { dataSources }: IGraphQLContext,
+    ) {
       return dataSources.minsei
         .getScoringData(parent.songId)
         .then((data) => Array.from(new Uint8Array(data)));
     },
   },
   Query: {
-    adhocLyrics(_: any, args: { id: string }): string[] {
-      return db.idToAdhocLyrics[args.id];
+    adhocLyrics(
+      _: any,
+      args: { id: string },
+      { room }: IGraphQLContext,
+    ): string[] {
+      return room.db.idToAdhocLyrics[args.id];
     },
     joysoundSongDetail: (
       _: any,
       args: { id: string },
-      { dataSources }: IDataSources,
+      { dataSources }: IGraphQLContext,
     ): Promise<JoysoundSongParent> => {
       return dataSources.joysound.getSongDetail(args.id).then((data) => ({
         id: args.id,
@@ -607,7 +641,7 @@ const resolvers = {
     joysoundSongsByArtist: (
       _: any,
       args: { artistId: string; first: number | null; after: string | null },
-      { dataSources }: IDataSources,
+      { dataSources }: IGraphQLContext,
     ): Promise<Connection<JoysoundSongParent, string>> => {
       const firstInt = args.first || 100;
       const afterInt = args.after ? parseInt(args.after, 10) : 1;
@@ -634,7 +668,7 @@ const resolvers = {
     joysoundSongsByKeyword: (
       _: any,
       args: { keyword: string; first: number | null; after: string | null },
-      { dataSources }: IDataSources,
+      { dataSources }: IGraphQLContext,
     ): Promise<Connection<JoysoundSongParent, string>> => {
       const firstInt = args.first || 100;
       const afterInt = args.after ? parseInt(args.after, 10) : 1;
@@ -661,7 +695,7 @@ const resolvers = {
     joysoundArtistsByKeyword: (
       _: any,
       args: { keyword: string; first: number | null; after: string | null },
-      { dataSources }: IDataSources,
+      { dataSources }: IGraphQLContext,
     ): Promise<Connection<JoysoundArtistParent, string>> => {
       const firstInt = args.first || 100;
       const afterInt = args.after ? parseInt(args.after, 10) : 1;
@@ -687,7 +721,7 @@ const resolvers = {
     songsByName: (
       _: any,
       args: { name: string; first: number | null; after: string | null },
-      { dataSources }: IDataSources,
+      { dataSources }: IGraphQLContext,
     ): Promise<Connection<SongParent, string>> => {
       const firstInt = args.first || 0;
       const afterInt = args.after ? parseInt(args.after, 10) : 0;
@@ -716,7 +750,7 @@ const resolvers = {
     songById: (
       _: any,
       args: { id: string },
-      { dataSources }: IDataSources,
+      { dataSources }: IGraphQLContext,
     ): Promise<SongParent> =>
       dataSources.dkwebsys.getMusicDetailsInfo(args.id).then((data) => ({
         id: args.id,
@@ -746,7 +780,7 @@ const resolvers = {
     artistsByName: (
       _: any,
       args: { name: string; first: number | null; after: string | null },
-      { dataSources }: IDataSources,
+      { dataSources }: IGraphQLContext,
     ): Promise<Connection<ArtistParent, string>> => {
       const firstInt = args.first || 0;
       const afterInt = args.after ? parseInt(args.after, 10) : 0;
@@ -774,7 +808,7 @@ const resolvers = {
     artistById: (
       _: any,
       args: { id: string; first: number | null; after: string | null },
-      { dataSources }: IDataSources,
+      { dataSources }: IGraphQLContext,
     ): Promise<ArtistParent> => {
       const firstInt = args.first || 0;
       const afterInt = args.after ? parseInt(args.after, 10) : 0;
@@ -788,12 +822,12 @@ const resolvers = {
           songCount: data.data.totalCount,
         }));
     },
-    currentSong: () => {
-      return db.currentSong;
+    currentSong: (_: any, __: any, { room }: IGraphQLContext) => {
+      return room.db.currentSong;
     },
-    queue: () => {
-      if (!db.songQueue.length) return [];
-      return db.songQueue;
+    queue: (_: any, __: any, { room }: IGraphQLContext) => {
+      if (!room.db.songQueue.length) return [];
+      return room.db.songQueue;
     },
     config: () => {
       return {
@@ -804,12 +838,13 @@ const resolvers = {
     songHistory: (
       _: any,
       args: { first: number | null; after: string | null },
+      { room }: IGraphQLContext,
     ): Connection<SongHistoryItem, string> => {
       const firstInt = args.first || 0;
       const afterInt = args.after ? parseInt(args.after, 10) : 0;
 
       return {
-        edges: db.songHistory
+        edges: room.db.songHistory
           .slice(afterInt, firstInt)
           .map((songHistoryItem, i) => ({
             node: songHistoryItem,
@@ -817,7 +852,7 @@ const resolvers = {
           })),
         pageInfo: {
           hasPreviousPage: false,
-          hasNextPage: firstInt + afterInt < db.songHistory.length,
+          hasNextPage: firstInt + afterInt < room.db.songHistory.length,
           startCursor: "0",
           endCursor: (firstInt + afterInt).toString(),
         },
@@ -826,7 +861,7 @@ const resolvers = {
     youtubeVideoInfo: (
       _: any,
       args: { videoId: string },
-      { dataSources }: IDataSources,
+      { dataSources }: IGraphQLContext,
     ): Promise<YoutubeVideoInfoResult> => {
       return (
         dataSources.youtube
@@ -893,8 +928,10 @@ const resolvers = {
         };
       }
     },
-    pitchShiftSemis: () => db.pitchShiftSemis,
-    playbackState: () => db.playbackState,
+    pitchShiftSemis: (_: any, __: any, { room }: IGraphQLContext) =>
+      room.db.pitchShiftSemis,
+    playbackState: (_: any, __: any, { room }: IGraphQLContext) =>
+      room.db.playbackState,
     videoDownloadProgress: (
       _: any,
       args: {
@@ -902,9 +939,10 @@ const resolvers = {
         songId: string;
         suffix: string | null;
       },
+      { room }: IGraphQLContext,
     ): VideoDownloadProgress => {
       const progress = getVideoDownloadProgress(
-        db.downloadQueue,
+        room.db.downloadQueue,
         args.videoDownloadType,
         args.songId,
         args.suffix,
@@ -914,14 +952,18 @@ const resolvers = {
     },
   },
   Mutation: {
-    sendEmote: (_: any, args: { emote: Emote }): boolean => {
-      pubsub.publish(SubscriptionEvent.Emote, { emote: args.emote });
+    sendEmote: (
+      _: any,
+      args: { emote: Emote },
+      { room }: IGraphQLContext,
+    ): boolean => {
+      room.pubsub.publish(SubscriptionEvent.Emote, { emote: args.emote });
       return true;
     },
     queueJoysoundSong: (
       _: any,
       args: { input: QueueJoysoundSongInput; tryHeadOfQueue: boolean },
-      { dataSources }: IDataSources,
+      { dataSources, room }: IGraphQLContext,
     ): QueueSongResult => {
       const queueItem: JoysoundQueueItem = {
         __typename: "JoysoundQueueItem",
@@ -929,7 +971,7 @@ const resolvers = {
         ...args.input,
       };
 
-      if (hasMaxSongsInQueue(queueItem.userIdentity)) {
+      if (hasMaxSongsInQueue(room, queueItem.userIdentity)) {
         return {
           __typename: "QueueSongError",
           reason: `${queueItem.userIdentity.nickname} already has ${karafriendsConfig.paxSongQueueLimit} song(s) in the queue or downloading`,
@@ -941,23 +983,26 @@ const resolvers = {
       console.log(`queueJoysoundSong: pushToHead=${pushToHead}`);
 
       downloadJoysoundData(
-        db.downloadQueue,
+        room.db.downloadQueue,
         queueItem.userIdentity,
         dataSources.joysound,
         queueItem,
         pushToHead,
-        pushSongToQueue,
+        pushSongToQueue.bind(null, room),
       );
 
       return {
         __typename: "QueueSongInfo",
-        eta: db.songQueue.reduce((acc, cur) => acc + (cur.playtime || 0), 0),
+        eta: room.db.songQueue.reduce(
+          (acc, cur) => acc + (cur.playtime || 0),
+          0,
+        ),
       };
     },
     queueDamSong: (
       _: any,
       args: { input: QueueDamSongInput; tryHeadOfQueue: boolean },
-      { dataSources }: IDataSources,
+      { dataSources, room }: IGraphQLContext,
     ): QueueSongResult => {
       const queueItem: DamQueueItem = {
         timestamp: Date.now().toString(),
@@ -965,7 +1010,7 @@ const resolvers = {
         __typename: "DamQueueItem",
       };
 
-      if (hasMaxSongsInQueue(queueItem.userIdentity)) {
+      if (hasMaxSongsInQueue(room, queueItem.userIdentity)) {
         return {
           __typename: "QueueSongError",
           reason: `${queueItem.userIdentity.nickname} already has ${karafriendsConfig.paxSongQueueLimit} song(s) in the queue or downloading`,
@@ -988,11 +1033,12 @@ const resolvers = {
           downloadDamVideo(url, queueItem.songId, queueItem.streamingUrlIdx);
         });
 
-      return pushSongToQueue(queueItem, pushToHead);
+      return pushSongToQueue(room, queueItem, pushToHead);
     },
     queueYoutubeSong: (
       _: any,
       args: { input: QueueYoutubeSongInput; tryHeadOfQueue: boolean },
+      { room }: IGraphQLContext,
     ): QueueSongResult => {
       const queueItem: YoutubeQueueItem = {
         timestamp: Date.now().toString(),
@@ -1003,7 +1049,7 @@ const resolvers = {
         __typename: "YoutubeQueueItem",
       };
 
-      if (hasMaxSongsInQueue(queueItem.userIdentity)) {
+      if (hasMaxSongsInQueue(room, queueItem.userIdentity)) {
         return {
           __typename: "QueueSongError",
           reason: `${queueItem.userIdentity.nickname} already has ${karafriendsConfig.paxSongQueueLimit} song(s) in the queue or downloading`,
@@ -1015,17 +1061,17 @@ const resolvers = {
       console.log(`queueDamSong: pushToHead=${pushToHead}`);
 
       if (args.input.adhocSongLyrics) {
-        db.idToAdhocLyrics[args.input.songId] = cleanupAdhocSongLyrics(
+        room.db.idToAdhocLyrics[args.input.songId] = cleanupAdhocSongLyrics(
           args.input.adhocSongLyrics,
         );
       }
 
       downloadYoutubeVideo(
-        db.downloadQueue,
+        room.db.downloadQueue,
         queueItem.userIdentity,
         args.input.songId,
         args.input.captionCode,
-        pushSongToQueue.bind(null, queueItem, pushToHead),
+        pushSongToQueue.bind(null, room, queueItem, pushToHead),
       );
 
       // The song likely hasn't actually been added to the queue yet since it needs to download,
@@ -1033,13 +1079,14 @@ const resolvers = {
       return {
         __typename: "QueueSongInfo",
         eta:
-          db.songQueue.reduce((acc, cur) => acc + (cur.playtime || 0), 0) +
+          room.db.songQueue.reduce((acc, cur) => acc + (cur.playtime || 0), 0) +
           (args.input.playtime || 0),
       };
     },
     queueNicoSong: (
       _: any,
       args: { input: QueueNicoSongInput; tryHeadOfQueue: boolean },
+      { room }: IGraphQLContext,
     ): QueueSongResult => {
       const queueItem: NicoQueueItem = {
         timestamp: Date.now().toString(),
@@ -1047,7 +1094,7 @@ const resolvers = {
         __typename: "NicoQueueItem",
       };
 
-      if (hasMaxSongsInQueue(queueItem.userIdentity)) {
+      if (hasMaxSongsInQueue(room, queueItem.userIdentity)) {
         return {
           __typename: "QueueSongError",
           reason: `${queueItem.userIdentity.nickname} already has ${karafriendsConfig.paxSongQueueLimit} song(s) in the queue or downloading`,
@@ -1059,100 +1106,111 @@ const resolvers = {
       console.log(`queueDamSong: pushToHead=${pushToHead}`);
 
       downloadNicoVideo(
-        db.downloadQueue,
+        room.db.downloadQueue,
         queueItem.userIdentity,
         args.input.songId,
-        pushSongToQueue.bind(null, queueItem, pushToHead),
+        pushSongToQueue.bind(null, room, queueItem, pushToHead),
       );
       // The song likely hasn't actually been added to the queue yet since it needs to download,
       // but let's optimistically return the eta assuming it will successfully queue
       return {
         __typename: "QueueSongInfo",
         eta:
-          db.songQueue.reduce((acc, cur) => acc + (cur.playtime || 0), 0) +
+          room.db.songQueue.reduce((acc, cur) => acc + (cur.playtime || 0), 0) +
           (args.input.playtime || 0),
       };
     },
     pushAdhocLyrics: (
       _: any,
       args: { input: PushAdhocLyricsInput },
+      { room }: IGraphQLContext,
     ): boolean => {
-      db.currentSongAdhocLyrics.push({
+      room.db.currentSongAdhocLyrics.push({
         lyric: args.input.lyric,
         lyricIndex: args.input.lyricIndex,
       });
-      pubsub.publish(SubscriptionEvent.CurrentSongAdhocLyricsChanged, {
-        currentSongAdhocLyricsChanged: db.currentSongAdhocLyrics,
+      room.pubsub.publish(SubscriptionEvent.CurrentSongAdhocLyricsChanged, {
+        currentSongAdhocLyricsChanged: room.db.currentSongAdhocLyrics,
       });
-      saveDb();
+      saveDb(room);
       return true;
     },
-    popSong: (_: any, args: {}): QueueItem | null => {
-      const newSong = db.songQueue.shift() || null;
+    popSong: (
+      _: any,
+      args: {},
+      { room }: IGraphQLContext,
+    ): QueueItem | null => {
+      const newSong = room.db.songQueue.shift() || null;
 
-      db.currentSongAdhocLyrics = [];
+      room.db.currentSongAdhocLyrics = [];
 
       if (
-        db.currentSong &&
-        db.currentSong.__typename === "YoutubeQueueItem" &&
-        db.currentSong.hasAdhocLyrics
+        room.db.currentSong &&
+        room.db.currentSong.__typename === "YoutubeQueueItem" &&
+        room.db.currentSong.hasAdhocLyrics
       ) {
-        delete db.idToAdhocLyrics[db.currentSong.songId];
+        delete room.db.idToAdhocLyrics[room.db.currentSong.songId];
       }
 
-      pubsub.publish(SubscriptionEvent.CurrentSongAdhocLyricsChanged, {
-        currentSongAdhocLyricsChanged: db.currentSongAdhocLyrics,
+      room.pubsub.publish(SubscriptionEvent.CurrentSongAdhocLyricsChanged, {
+        currentSongAdhocLyricsChanged: room.db.currentSongAdhocLyrics,
       });
 
-      db.currentSong = newSong;
-      pubsub.publish(SubscriptionEvent.CurrentSongChanged, {
-        currentSongChanged: db.currentSong,
+      room.db.currentSong = newSong;
+      room.pubsub.publish(SubscriptionEvent.CurrentSongChanged, {
+        currentSongChanged: room.db.currentSong,
       });
 
-      pubsub.publish(SubscriptionEvent.QueueChanged, {
+      room.pubsub.publish(SubscriptionEvent.QueueChanged, {
         queueChanged: {
-          currentSong: db.currentSong,
-          newQueue: db.songQueue,
+          currentSong: room.db.currentSong,
+          newQueue: room.db.songQueue,
         },
       });
 
-      if (db.currentSong) {
-        const prevSong: QueueItem | null = db.songHistory[0]?.song || null;
+      if (room.db.currentSong) {
+        const prevSong: QueueItem | null = room.db.songHistory[0]?.song || null;
 
         if (
           !prevSong ||
-          db.currentSong.__typename !== prevSong.__typename ||
-          db.currentSong.songId !== prevSong.songId ||
-          db.currentSong.timestamp !== prevSong.timestamp
+          room.db.currentSong.__typename !== prevSong.__typename ||
+          room.db.currentSong.songId !== prevSong.songId ||
+          room.db.currentSong.timestamp !== prevSong.timestamp
         ) {
-          db.songHistory.unshift({ song: db.currentSong });
+          room.db.songHistory.unshift({ song: room.db.currentSong });
         }
       }
 
-      saveDb();
+      saveDb(room);
       return newSong;
     },
     removeSong: (
       _: any,
       args: { songId: string; timestamp: string },
+      { room }: IGraphQLContext,
     ): boolean => {
-      const songIdx = db.songQueue.findIndex(
+      const songIdx = room.db.songQueue.findIndex(
         (item) =>
           item.songId === args.songId && item.timestamp === args.timestamp,
       );
-      db.songQueue.splice(songIdx, 1);
-      pubsub.publish(SubscriptionEvent.QueueChanged, {
+      if (songIdx < 0) return false;
+      room.db.songQueue.splice(songIdx, 1);
+      room.pubsub.publish(SubscriptionEvent.QueueChanged, {
         queueChanged: {
-          currentSong: db.currentSong,
-          newQueue: db.songQueue,
+          currentSong: room.db.currentSong,
+          newQueue: room.db.songQueue,
         },
       });
-      saveDb();
+      saveDb(room);
       return true;
     },
-    setPitchShiftSemis: (_: any, args: { semis: number }): boolean => {
-      db.pitchShiftSemis = args.semis;
-      pubsub.publish(SubscriptionEvent.PitchShiftSemisChanged, {
+    setPitchShiftSemis: (
+      _: any,
+      args: { semis: number },
+      { room }: IGraphQLContext,
+    ): boolean => {
+      room.db.pitchShiftSemis = args.semis;
+      room.pubsub.publish(SubscriptionEvent.PitchShiftSemisChanged, {
         pitchShiftSemisChanged: args.semis,
       });
       return true;
@@ -1160,46 +1218,52 @@ const resolvers = {
     setPlaybackState: (
       _: any,
       args: { playbackState: PlaybackState },
+      { room }: IGraphQLContext,
     ): boolean => {
-      db.playbackState = args.playbackState;
-      pubsub.publish(SubscriptionEvent.PlaybackStateChanged, {
+      room.db.playbackState = args.playbackState;
+      room.pubsub.publish(SubscriptionEvent.PlaybackStateChanged, {
         playbackStateChanged: args.playbackState,
       });
-      saveDb();
+      saveDb(room);
       return true;
     },
   },
   Subscription: {
     currentSongAdhocLyricsChanged: {
-      subscribe: () =>
-        pubsub.asyncIterableIterator([
+      subscribe: (_: any, __: any, { room }: IGraphQLContext) =>
+        room.pubsub.asyncIterableIterator([
           SubscriptionEvent.CurrentSongAdhocLyricsChanged,
         ]),
     },
     currentSongChanged: {
-      subscribe: () =>
-        pubsub.asyncIterableIterator([SubscriptionEvent.CurrentSongChanged]),
+      subscribe: (_: any, __: any, { room }: IGraphQLContext) =>
+        room.pubsub.asyncIterableIterator([
+          SubscriptionEvent.CurrentSongChanged,
+        ]),
     },
     emote: {
-      subscribe: () => pubsub.asyncIterableIterator([SubscriptionEvent.Emote]),
+      subscribe: (_: any, __: any, { room }: IGraphQLContext) =>
+        room.pubsub.asyncIterableIterator([SubscriptionEvent.Emote]),
     },
     pitchShiftSemisChanged: {
-      subscribe: () =>
-        pubsub.asyncIterableIterator([
+      subscribe: (_: any, __: any, { room }: IGraphQLContext) =>
+        room.pubsub.asyncIterableIterator([
           SubscriptionEvent.PitchShiftSemisChanged,
         ]),
     },
     playbackStateChanged: {
-      subscribe: () =>
-        pubsub.asyncIterableIterator([SubscriptionEvent.PlaybackStateChanged]),
+      subscribe: (_: any, __: any, { room }: IGraphQLContext) =>
+        room.pubsub.asyncIterableIterator([
+          SubscriptionEvent.PlaybackStateChanged,
+        ]),
     },
     queueAdded: {
-      subscribe: () =>
-        pubsub.asyncIterableIterator([SubscriptionEvent.QueueAdded]),
+      subscribe: (_: any, __: any, { room }: IGraphQLContext) =>
+        room.pubsub.asyncIterableIterator([SubscriptionEvent.QueueAdded]),
     },
     queueChanged: {
-      subscribe: () =>
-        pubsub.asyncIterableIterator([SubscriptionEvent.QueueChanged]),
+      subscribe: (_: any, __: any, { room }: IGraphQLContext) =>
+        room.pubsub.asyncIterableIterator([SubscriptionEvent.QueueChanged]),
     },
   },
 };
@@ -1263,8 +1327,19 @@ function innertubeApiProvider(): Promise<Innertube> {
   return innertubePromise;
 }
 
-export function applyGraphQLMiddleware(app: Application) {
+export interface GraphQLServerOptions {
+  host?: string;
+  port?: number;
+  onFatalError?: (title: string, error: Error) => void;
+}
+
+export function applyGraphQLMiddleware(
+  app: Application,
+  options: GraphQLServerOptions = {},
+) {
   const httpServer = createServer(app);
+  const port = options.port ?? karafriendsConfig.remoconPort;
+  const host = options.host;
 
   const wsServer = new WebSocketServer({
     server: httpServer,
@@ -1276,27 +1351,45 @@ export function applyGraphQLMiddleware(app: Application) {
   // with a bare stack trace. Fail loudly with a clear message and quit cleanly.
   httpServer.on("error", (err: NodeJS.ErrnoException) => {
     if (err.code === "EADDRINUSE") {
-      dialog.showErrorBox(
-        "karafriends: port already in use",
-        `Port ${karafriendsConfig.remoconPort} is already in use. ` +
-          "Is karafriends already running? Close the other instance " +
-          "(or free the port) and relaunch.",
+      const portError = new Error(
+        `Port ${port} is already in use. Is karafriends already running? ` +
+          "Close the other instance or choose another port.",
       );
+      console.error(portError.message);
+      options.onFatalError?.("karafriends: port already in use", portError);
     } else {
       console.error("HTTP server error:", err);
+      options.onFatalError?.("karafriends: HTTP server error", err);
     }
-    electronApp.quit();
   });
   wsServer.on("error", (err) => {
     console.error("WebSocket server error:", err);
   });
 
-  const serverCleanup = useServer({ schema }, wsServer);
+  const serverCleanup = useServer(
+    {
+      schema,
+      context: (ctx) => ({
+        dataSources: undefined as unknown as IGraphQLContext["dataSources"],
+        room: getRoom(ctx.connectionParams?.roomId),
+      }),
+    },
+    wsServer,
+  );
 
-  db = loadDb();
-
-  const server = new ApolloServer<IDataSources>({
+  const server = new ApolloServer<IGraphQLContext>({
     schema,
+    formatError: (formattedError, error) => {
+      const path = formattedError.path?.join(".") || "unknown";
+      debugError(
+        "graphql",
+        `${formattedError.message}; path=${path}; code=${
+          formattedError.extensions?.code || "unknown"
+        }`,
+        error,
+      );
+      return formattedError;
+    },
     plugins: [
       ApolloServerPluginDrainHttpServer({ httpServer }),
       ApolloServerPluginCacheControlDisabled(),
@@ -1307,7 +1400,7 @@ export function applyGraphQLMiddleware(app: Application) {
     ],
   });
 
-  if (isDev) {
+  if (process.env.NODE_ENV !== "production") {
     app.use("/graphql", (req, res, next) => {
       res.append("Access-Control-Allow-Origin", "*");
       res.append("Access-Control-Allow-Headers", "*");
@@ -1353,10 +1446,14 @@ export function applyGraphQLMiddleware(app: Application) {
         "/graphql",
         express.json(),
         expressMiddleware(server, {
-          context: async () => {
+          context: async ({ req }: { req: Request }) => {
             const innertubeApiInstance = await innertubeApiProvider();
+            const roomHeader = req.headers["x-karafriends-room"];
 
             return {
+              room: getRoom(
+                Array.isArray(roomHeader) ? roomHeader[0] : roomHeader,
+              ),
               dataSources: {
                 minsei: new MinseiAPI(minseiCredentialsProvider, {
                   cache: server.cache,
@@ -1376,9 +1473,9 @@ export function applyGraphQLMiddleware(app: Application) {
           },
         }),
       );
-      httpServer.listen(karafriendsConfig.remoconPort, () => {
+      httpServer.listen(port, host, () => {
         console.log(
-          `Server is now running on http://localhost:${karafriendsConfig.remoconPort}`,
+          `Server is now running on http://${host || "localhost"}:${port}`,
         );
       });
     })
@@ -1386,7 +1483,11 @@ export function applyGraphQLMiddleware(app: Application) {
       // server.start() rejecting leaves the app with no GraphQL backend, so there
       // is nothing useful to keep running — surface it and quit cleanly.
       console.error("Failed to start the GraphQL server:", err);
-      dialog.showErrorBox("karafriends: failed to start", String(err));
-      electronApp.quit();
+      options.onFatalError?.(
+        "karafriends: failed to start",
+        err instanceof Error ? err : new Error(String(err)),
+      );
     });
+
+  return httpServer;
 }

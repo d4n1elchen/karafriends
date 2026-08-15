@@ -16,6 +16,7 @@ const inputDevices: { [deviceId: number]: any } = {};
 let karafriendsConfig: KarafriendsConfig | null = null;
 
 contextBridge.exposeInMainWorld("karafriends", {
+  isDesktop: true,
   ipAddresses,
   karafriendsConfig: () => {
     if (karafriendsConfig === null) {

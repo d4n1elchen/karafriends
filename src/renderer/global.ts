@@ -3,6 +3,7 @@ import type { KarafriendsConfig } from "../common/config";
 declare global {
   interface Window {
     karafriends: {
+      isDesktop: boolean;
       ipAddresses(): string[];
       karafriendsConfig(): KarafriendsConfig;
       nativeAudio: {

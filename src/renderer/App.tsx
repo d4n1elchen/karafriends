@@ -37,8 +37,11 @@ function App(props: {
   audio: KarafriendsAudio;
 }) {
   const [mics, _setMics] = useState<InputDevice[]>([]);
-  const [hostname, setHostname] = useState(HOSTNAME);
+  const [hostname, setHostname] = useState(
+    window.karafriends.isDesktop ? HOSTNAME : window.location.host,
+  );
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [started, setStarted] = useState(window.karafriends.isDesktop);
 
   const setMics = (newMics: InputDevice[]) => {
     const micsToSave = newMics.map((mic) => ({
@@ -51,7 +54,7 @@ function App(props: {
 
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.key === "q" || event.key === "Q") {
-      setSidebarVisible(!sidebarVisible);
+      setSidebarVisible((visible) => !visible);
     }
   };
 
@@ -59,28 +62,28 @@ function App(props: {
     window.addEventListener("keydown", handleKeyDown);
 
     const savedMicInfo = JSON.parse(localStorage.getItem("mics") || "[]");
-    const inputDevices = window.karafriends.nativeAudio.inputDevices();
-    const channelCounts: { [key: string]: number } = inputDevices.reduce(
-      (acc, cur) => ({
-        ...acc,
-        [cur[0]]: cur[1],
-      }),
-      {},
-    );
-
-    const savedMics = savedMicInfo
-      .filter(
-        ({ name, channel }: SavedMic) =>
-          name in channelCounts && channel < channelCounts[name],
-      )
-      .map(({ name, channel }: SavedMic) => new InputDevice(name, channel));
-
-    setMics(savedMics);
+    if (window.karafriends.isDesktop) {
+      void InputDevice.available().then((inputDevices) => {
+        const devicesByName = new Map(
+          inputDevices.map((device) => [device.name, device]),
+        );
+        return Promise.all(
+          savedMicInfo
+            .filter(({ name, channel }: SavedMic) => {
+              const device = devicesByName.get(name);
+              return device !== undefined && channel < device.channelCount;
+            })
+            .map(({ name, channel }: SavedMic) =>
+              InputDevice.create(devicesByName.get(name)!, channel),
+            ),
+        ).then(setMics);
+      });
+    }
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [sidebarVisible]);
+  }, []);
 
   useSubscription<AppQueueAddedSubscription>(
     useMemo(
@@ -117,7 +120,22 @@ function App(props: {
           sidebarVisible ? "s11" : "s12"
         } valign-wrapper`}
       >
-        <Player mics={mics} kuroshiro={props.kuroshiro} audio={props.audio} />
+        {started ? (
+          <Player mics={mics} kuroshiro={props.kuroshiro} audio={props.audio} />
+        ) : (
+          <div className="browserStart center-align white-text">
+            <h1>Karafriends</h1>
+            <p>Start the player to enable browser audio.</p>
+            <button
+              className="btn-large"
+              onClick={() => {
+                void props.audio.resume().then(() => setStarted(true));
+              }}
+            >
+              Start karaoke
+            </button>
+          </div>
+        )}
         <Effects />
       </div>
       {sidebarVisible && (

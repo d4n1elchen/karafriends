@@ -1,6 +1,6 @@
 import { ChildProcess, spawn } from "child_process";
-import { app } from "electron"; // tslint:disable-line:no-implicit-dependencies
 import fs from "fs";
+import os from "os";
 import path from "path";
 import process from "process";
 
@@ -16,8 +16,13 @@ import { JoysoundAPI, JoysoundSongRawData } from "../main/joysoundApi";
 
 import { ensureExternalResources, getResourcePaths } from "./externalResources";
 import { getSongDuration } from "./joysoundParser";
+import { getWebDataDirectory, isElectronRuntime } from "./runtimePaths";
 
-export const TEMP_FOLDER: string = `${app.getPath("temp")}/karafriends_tmp`;
+export const TEMP_FOLDER: string =
+  process.env.KARAFRIENDS_MEDIA_DIR ||
+  (isElectronRuntime()
+    ? path.join(os.tmpdir(), "karafriends_tmp")
+    : path.join(getWebDataDirectory(), "media"));
 const captionCodeRe: RegExp = new RegExp(/^[a-z]{2}$/);
 
 interface JoysoundVideoData {

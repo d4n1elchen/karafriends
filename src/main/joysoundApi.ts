@@ -2,6 +2,7 @@ import { DataSourceConfig, RESTDataSource } from "@apollo/datasource-rest";
 import type { KeyValueCache } from "@apollo/utils.keyvaluecache";
 import promiseRetry from "promise-retry";
 import invariant from "ts-invariant";
+import { debugError, debugLog } from "../common/debug";
 
 const COOKIE_IDS: string[] = ["AWSALB", "AWSALBCORS", "JSESSIONID"];
 
@@ -133,26 +134,34 @@ export class JoysoundAPI extends RESTDataSource {
       .join("&");
 
     const creds = await this.credsProvider();
+    const startedAt = Date.now();
+    debugLog("joysound", `POST ${url}; fields=${Object.keys(data).join(",")}`);
 
-    console.debug(
-      `[joysound] curl ${
-        this.baseURL
-      }${url} -d "${body}" -H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" -H "Cookie: ${generateCookieString(
-        creds.cookies,
-      )}" -H "X-CSRF-TOKEN: ${creds.csrfToken}"`,
-    );
-
-    return super.post(url, {
-      body,
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        Cookie: generateCookieString(creds.cookies),
-        Referer: "https://www.sound-cafe.jp/player",
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/112.0",
-        "X-CSRF-TOKEN": creds.csrfToken,
-      },
-    });
+    try {
+      const result = await super.post<T>(url, {
+        body,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+          Cookie: generateCookieString(creds.cookies),
+          Referer: "https://www.sound-cafe.jp/player",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/112.0",
+          "X-CSRF-TOKEN": creds.csrfToken,
+        },
+      });
+      debugLog(
+        "joysound",
+        `POST ${url} completed in ${Date.now() - startedAt}ms`,
+      );
+      return result;
+    } catch (error) {
+      debugError(
+        "joysound",
+        `POST ${url} failed after ${Date.now() - startedAt}ms`,
+        error,
+      );
+      throw error;
+    }
   }
 
   getArtistListByKeyword(keyword: string, start: number, count: number) {
@@ -252,6 +261,7 @@ export class JoysoundAPI extends RESTDataSource {
   }
 
   static async login(email: string, password: string) {
+    debugLog("joysound", "Starting login (credentials redacted)");
     const loginCookies: JoysoundCookies = {
       AWSALB: "",
       AWSALBCORS: "",
@@ -265,6 +275,7 @@ export class JoysoundAPI extends RESTDataSource {
       },
     })
       .then((resp) => {
+        debugLog("joysound", `GET /login returned HTTP ${resp.status}`);
         const setCookie = resp.headers.get("set-cookie");
         invariant(setCookie);
 
@@ -296,6 +307,7 @@ export class JoysoundAPI extends RESTDataSource {
       },
     })
       .then((resp) => {
+        debugLog("joysound", `POST /login/check returned HTTP ${resp.status}`);
         const setCookie = resp.headers.get("set-cookie");
         invariant(setCookie);
 
@@ -316,6 +328,7 @@ export class JoysoundAPI extends RESTDataSource {
         });
       })
       .then((resp) => {
+        debugLog("joysound", `POST /login returned HTTP ${resp.status}`);
         const setCookie = resp.headers.get("set-cookie");
         invariant(setCookie);
 
@@ -330,6 +343,7 @@ export class JoysoundAPI extends RESTDataSource {
         });
       })
       .then((resp) => {
+        debugLog("joysound", `GET / returned HTTP ${resp.status}`);
         const setCookie = resp.headers.get("set-cookie");
         invariant(setCookie);
 
@@ -343,6 +357,7 @@ export class JoysoundAPI extends RESTDataSource {
         );
         invariant(matchData);
 
+        debugLog("joysound", "Login completed successfully");
         return {
           cookies: loginCookies,
           csrfToken: matchData[1],

@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { FormEvent, useState } from "react";
 import { HashRouter, Route, Routes } from "react-router";
 
 import ControlBar from "./components/ControlBar";
@@ -22,8 +22,40 @@ import * as styles from "./App.module.scss";
 import useQueueNotifications from "./hooks/useQueueNotifications";
 
 const App = () => {
-  const { deviceId } = useUserIdentity(true);
+  const { deviceId } = useUserIdentity();
+  const [nickname, setNickname] = useState(
+    () => localStorage.getItem("nickname") || "",
+  );
   useQueueNotifications(deviceId);
+
+  if (!nickname) {
+    const saveNickname = (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      const nextNickname = String(form.get("nickname") || "").trim();
+      if (!nextNickname) return;
+      localStorage.setItem("nickname", nextNickname);
+      setNickname(nextNickname);
+    };
+
+    return (
+      <main className={styles.app}>
+        <form onSubmit={saveNickname}>
+          <h1>Join karaoke</h1>
+          <label htmlFor="nickname">Your nickname</label>
+          <input
+            id="nickname"
+            name="nickname"
+            autoComplete="nickname"
+            maxLength={40}
+            required={true}
+            autoFocus={true}
+          />
+          <button type="submit">Join room</button>
+        </form>
+      </main>
+    );
+  }
 
   return (
     <HashRouter>

@@ -1,17 +1,24 @@
 import M from "materialize-css";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 
 import "./global";
-import { InputDevice } from "./nativeAudio";
+import { InputDevice, InputDeviceOption } from "./nativeAudio";
 
 const MicrophoneSettingOption = ({
+  deviceId,
   name,
   channel,
 }: {
+  deviceId: string;
   name: string;
   channel: number;
 }) => (
-  <option data-name={name} data-channel={channel} value={`${name}_${channel}`}>
+  <option
+    data-device-id={deviceId}
+    data-name={name}
+    data-channel={channel}
+    value={`${deviceId}_${channel}`}
+  >
     {`${name} (Channel ${channel})`}
   </option>
 );
@@ -22,41 +29,87 @@ interface Props {
 }
 
 export default function MicrophoneSetting({ mic, onChange }: Props) {
+  const [devices, setDevices] = useState<InputDeviceOption[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const refreshDevices = async (requestPermission: boolean) => {
+    setLoading(true);
+    setError(null);
+    try {
+      setDevices(await InputDevice.available(requestPermission));
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Microphone access failed",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     M.AutoInit();
+    if (window.karafriends.isDesktop || mic !== null) {
+      void refreshDevices(false);
+    }
   }, []);
 
-  console.log(window.karafriends.nativeAudio.inputDevices());
+  if (!window.karafriends.isDesktop && devices.length === 0) {
+    return (
+      <div>
+        <button
+          className="btn"
+          disabled={loading}
+          onClick={() => void refreshDevices(true)}
+        >
+          {loading ? "Requesting microphone…" : "Enable microphone"}
+        </button>
+        {error && <p role="alert">{error}</p>}
+      </div>
+    );
+  }
 
   return (
     <div className="input-field">
       <select
-        value={mic ? `${mic.name}_${mic.channelSelection}` : ""}
+        value={mic ? `${mic.deviceId}_${mic.channelSelection}` : ""}
         onChange={(e) => {
           const dataset = e.target.options[e.target.selectedIndex].dataset;
-          const newMic = new InputDevice(
-            dataset.name!,
-            parseInt(dataset.channel!, 10)
+          const option = devices.find(
+            (candidate) => candidate.id === dataset.deviceId,
           );
-          onChange(newMic);
+          if (!option) return;
+          setLoading(true);
+          setError(null);
+          InputDevice.create(option, parseInt(dataset.channel!, 10))
+            .then(onChange)
+            .catch((reason) =>
+              setError(
+                reason instanceof Error
+                  ? reason.message
+                  : "Microphone access failed",
+              ),
+            )
+            .finally(() => setLoading(false));
         }}
+        disabled={loading}
       >
         <option value="" disabled={true}>
           Select a microphone
         </option>
-        {window.karafriends.nativeAudio
-          .inputDevices()
-          .map(([name, channelCount]) =>
-            [...Array(channelCount)].map((_, i) => (
-              <MicrophoneSettingOption
-                key={`${name}_${i}`}
-                name={name}
-                channel={i}
-              />
-            ))
-          )}
+        {devices.map(({ id, name, channelCount }) =>
+          [...Array(channelCount)].map((_, i) => (
+            <MicrophoneSettingOption
+              key={`${name}_${i}`}
+              name={name}
+              channel={i}
+              deviceId={id}
+            />
+          )),
+        )}
       </select>
       <label>Microphone</label>
+      {error && <p role="alert">{error}</p>}
     </div>
   );
 }

@@ -15,6 +15,9 @@
 /dist
 /vids
 
+# local configuration, downloads, queue state, and runtime tools
+/data/
+
 # misc
 .DS_Store
 .env.local

@@ -1,0 +1,24 @@
+.failure {
+  min-height: 100vh;
+  box-sizing: border-box;
+  display: grid;
+  place-content: center;
+  gap: 1rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.failure h1,
+.failure p {
+  margin: 0;
+}
+
+.failure button {
+  justify-self: center;
+  padding: 0.75rem 1.25rem;
+  border: 0;
+  border-radius: 4px;
+  color: #fff;
+  background: #b3261e;
+  font: inherit;
+}

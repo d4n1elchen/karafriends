@@ -1,4 +1,6 @@
 import { invariant } from "ts-invariant";
+import { reportClientError, reportClientRecovered } from "./clientError";
+import { getRoomId } from "./roomId";
 
 import { createClient } from "graphql-ws";
 import {
@@ -11,30 +13,76 @@ import {
   Variables,
 } from "relay-runtime";
 
-function fetchQuery(request: RequestParameters, variables: Variables) {
-  return fetch(
-    window.karafriends !== undefined
-      ? `http://localhost:${
-          window.karafriends.karafriendsConfig().remoconPort
-        }/graphql`
-      : "/graphql",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+const REQUEST_TIMEOUT_MS = 20_000;
+
+async function fetchQuery(request: RequestParameters, variables: Variables) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(
+    () => controller.abort(),
+    REQUEST_TIMEOUT_MS,
+  );
+
+  try {
+    const response = await fetch(
+      window.karafriends?.isDesktop
+        ? `http://localhost:${
+            window.karafriends.karafriendsConfig().remoconPort
+          }/graphql`
+        : "/graphql",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Karafriends-Room": getRoomId(),
+        },
+        body: JSON.stringify({
+          query: request.text,
+          variables,
+        }),
+        signal: controller.signal,
       },
-      body: JSON.stringify({
-        query: request.text,
-        variables,
-      }),
+    );
+
+    const responseText = await response.text();
+    if (!response.ok) {
+      throw new Error(`Karaoke server returned HTTP ${response.status}.`);
     }
-  ).then((response) => {
-    return response.json();
-  });
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(responseText);
+    } catch {
+      throw new Error("The karaoke server returned an invalid response.");
+    }
+
+    if (
+      payload &&
+      typeof payload === "object" &&
+      "errors" in payload &&
+      Array.isArray(payload.errors) &&
+      payload.errors.length > 0
+    ) {
+      const firstError = payload.errors[0];
+      reportClientError(
+        firstError && typeof firstError === "object" && "message" in firstError
+          ? String(firstError.message)
+          : "The karaoke server could not complete the request.",
+      );
+    } else {
+      reportClientRecovered();
+    }
+
+    return payload;
+  } catch (error) {
+    reportClientError(error);
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 function getSubscriptionUrl(): string {
-  if (window.karafriends !== undefined) {
+  if (window.karafriends?.isDesktop) {
     return `ws://localhost:${
       window.karafriends.karafriendsConfig().remoconPort
     }/graphql`;
@@ -47,7 +95,17 @@ function getSubscriptionUrl(): string {
 
 const subscriptionClient = createClient({
   url: getSubscriptionUrl(),
+  connectionParams: () => ({ roomId: getRoomId() }),
   shouldRetry: () => true,
+  on: {
+    connected: () => reportClientRecovered(),
+    error: (error) => reportClientError(error),
+    closed: (event) => {
+      const closeEvent = event as { code?: number; reason?: string };
+      if (closeEvent.code !== 1000)
+        reportClientError(closeEvent.reason || "WebSocket closed");
+    },
+  },
 });
 
 const subscribe = (operation: RequestParameters, variables: Variables) => {
@@ -60,7 +118,7 @@ const subscribe = (operation: RequestParameters, variables: Variables) => {
         query: operation.text,
         variables,
       },
-      sink
+      sink,
     );
   });
 };

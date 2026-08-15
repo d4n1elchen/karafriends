@@ -162,7 +162,12 @@ function createWindow() {
 
   expressApp.use(compression());
 
-  applyGraphQLMiddleware(expressApp);
+  applyGraphQLMiddleware(expressApp, {
+    onFatalError: (title, error) => {
+      dialog.showErrorBox(title, error.message);
+      app.quit();
+    },
+  });
 
   expressApp.use(remoconServiceWorkerAllowed());
 

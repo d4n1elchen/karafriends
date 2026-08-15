@@ -8,6 +8,18 @@ on:
 permissions:
   pull-requests: write
 jobs:
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+      - run: npm install -g yarn
+      - run: yarn install --immutable
+      - run: yarn test:unit
+      - run: yarn build-web
+      - run: yarn typecheck
   build-macos-aarch64:
     runs-on: [self-hosted, karafriends-integration]
     steps:

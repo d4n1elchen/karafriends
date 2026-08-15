@@ -50,6 +50,12 @@ try {
   const playerUrl = new URL(page.url());
   const roomId = playerUrl.searchParams.get("room");
   assert.match(roomId, /^[a-f0-9]{32}$/);
+  await page.waitForSelector("button.btn-large");
+  const startLabel = await page.$eval("button.btn-large", (button) =>
+    button.textContent.trim(),
+  );
+  assert.equal(startLabel, "Start karaoke");
+  await page.click("button.btn-large");
   await page.waitForSelector("video.karaVid");
   await page.waitForSelector("canvas.qrcode");
 

@@ -41,6 +41,7 @@ function App(props: {
     window.karafriends.isDesktop ? HOSTNAME : window.location.host,
   );
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [started, setStarted] = useState(window.karafriends.isDesktop);
 
   const setMics = (newMics: InputDevice[]) => {
     const micsToSave = newMics.map((mic) => ({
@@ -59,26 +60,6 @@ function App(props: {
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
-
-    // Browsers may initially suspend Web Audio. Try immediately so normal
-    // room navigation starts without an extra screen, then use the first
-    // interaction anywhere in the player to satisfy stricter autoplay rules.
-    const unlockAudio = () => {
-      void props.audio
-        .resume()
-        .then(() => {
-          if (props.audio.audioContext.state === "running") {
-            window.removeEventListener("pointerdown", unlockAudio, true);
-            window.removeEventListener("keydown", unlockAudio, true);
-          }
-        })
-        .catch(() => {
-          // Keep the listeners installed so a later user gesture can retry.
-        });
-    };
-    unlockAudio();
-    window.addEventListener("pointerdown", unlockAudio, true);
-    window.addEventListener("keydown", unlockAudio, true);
 
     const savedMicInfo = JSON.parse(localStorage.getItem("mics") || "[]");
     if (window.karafriends.isDesktop) {
@@ -101,8 +82,6 @@ function App(props: {
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("pointerdown", unlockAudio, true);
-      window.removeEventListener("keydown", unlockAudio, true);
     };
   }, []);
 
@@ -141,7 +120,22 @@ function App(props: {
           sidebarVisible ? "s11" : "s12"
         } valign-wrapper`}
       >
-        <Player mics={mics} kuroshiro={props.kuroshiro} audio={props.audio} />
+        {started ? (
+          <Player mics={mics} kuroshiro={props.kuroshiro} audio={props.audio} />
+        ) : (
+          <div className="browserStart center-align white-text">
+            <h1>Karafriends</h1>
+            <p>Start the player to enable browser audio.</p>
+            <button
+              className="btn-large"
+              onClick={() => {
+                void props.audio.resume().then(() => setStarted(true));
+              }}
+            >
+              Start karaoke
+            </button>
+          </div>
+        )}
         <Effects />
       </div>
       {sidebarVisible && (

@@ -10,6 +10,18 @@ export default class KarafriendsAudio {
     this.gainNode.connect(this.audioContext.destination);
 
     this.vocoderNode = null;
+
+    // Some Android TV WebViews expose Web Audio without AudioWorklet. Keep
+    // normal playback available in those browsers; only pitch shifting needs
+    // the worklet.
+    if (
+      !this.audioContext.audioWorklet ||
+      typeof AudioWorkletNode === "undefined"
+    ) {
+      console.warn("AudioWorklet is unavailable; pitch shift will be disabled");
+      return;
+    }
+
     this.audioContext.audioWorklet
       .addModule(
         new URL("worklet:./audio/phazeAudioWorklet.ts", import.meta.url),

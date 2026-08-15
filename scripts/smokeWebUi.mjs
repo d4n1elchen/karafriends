@@ -59,6 +59,29 @@ try {
   await page.waitForSelector("video.karaVid");
   await page.waitForSelector("canvas.qrcode");
 
+  const noAudioWorkletPage = await browser.newPage();
+  monitorTelemetry(noAudioWorkletPage);
+  const noAudioWorkletErrors = [];
+  noAudioWorkletPage.on("pageerror", (error) =>
+    noAudioWorkletErrors.push(error),
+  );
+  await noAudioWorkletPage.evaluateOnNewDocument(() => {
+    Object.defineProperty(AudioContext.prototype, "audioWorklet", {
+      configurable: true,
+      value: undefined,
+    });
+  });
+  await noAudioWorkletPage.goto(playerUrl.toString(), {
+    waitUntil: "networkidle0",
+  });
+  await noAudioWorkletPage.waitForSelector("button.btn-large");
+  assert.deepEqual(
+    noAudioWorkletErrors,
+    [],
+    "player should load when AudioWorklet is unavailable",
+  );
+  await noAudioWorkletPage.close();
+
   const remote = await browser.newPage();
   monitorTelemetry(remote);
   remote.on("pageerror", (error) => pageErrors.push(error));

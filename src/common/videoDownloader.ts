@@ -15,7 +15,10 @@ import {
 import { JoysoundAPI, JoysoundSongRawData } from "../main/joysoundApi";
 
 import { ensureExternalResources, getResourcePaths } from "./externalResources";
-import { getSongDuration } from "./joysoundParser";
+import {
+  getJoysoundOggPlaytime,
+  getJoysoundTelopDuration,
+} from "./joysoundMediaMetadata";
 import { getWebDataDirectory, isElectronRuntime } from "./runtimePaths";
 
 export const TEMP_FOLDER: string =
@@ -175,53 +178,8 @@ function removeVideoDownloadFromQueue(
   downloadQueue: DownloadQueueItem[],
   downloadQueueItem: DownloadQueueItem,
 ): void {
-  downloadQueue.splice(downloadQueue.indexOf(downloadQueueItem), 1);
-}
-
-function getJoysoundOggPlaytime(oggBuffer: Buffer): number {
-  const FIELD_TAG = new Uint8Array([
-    0x70, 0x6c, 0x61, 0x79, 0x74, 0x69, 0x6d, 0x65, 0x3d,
-  ]);
-
-  let fieldOffset = 0;
-  let fieldLength = 0;
-
-  for (let i = 0; i < oggBuffer.length; i++) {
-    const oggSlice = oggBuffer.subarray(i, i + FIELD_TAG.length);
-
-    let isFieldTag = true;
-
-    for (let j = 0; j < oggSlice.length; j++) {
-      if (oggSlice[j] !== FIELD_TAG[j]) {
-        isFieldTag = false;
-        break;
-      }
-    }
-
-    if (!isFieldTag) {
-      continue;
-    }
-
-    fieldOffset = i + FIELD_TAG.length;
-
-    const fieldLengthView = new DataView(oggBuffer.buffer, i - 4, 4);
-    fieldLength = fieldLengthView.getUint32(0, true) - FIELD_TAG.length;
-
-    break;
-  }
-
-  const playtimeBuffer = oggBuffer.subarray(
-    fieldOffset,
-    fieldOffset + fieldLength,
-  );
-
-  let playtimeString = "";
-
-  for (const char of playtimeBuffer) {
-    playtimeString += String.fromCharCode(char);
-  }
-
-  return parseInt(playtimeString, 10);
+  const index = downloadQueue.indexOf(downloadQueueItem);
+  if (index >= 0) downloadQueue.splice(index, 1);
 }
 
 export function downloadDamVideo(
@@ -537,15 +495,26 @@ function composeJoysoundVideoPromise(
       safeUnlink(tempFilename);
 
       if (code === 0) {
-        const metadata: JoysoundVideoData = {
-          songDuration: getSongDuration(telopBuffer.buffer) * 1000,
-          songPlaytime: getJoysoundOggPlaytime(oggBuffer),
-          songId,
-          oggBuffer,
-          videoPlaytime,
-        };
+        try {
+          const metadata: JoysoundVideoData = {
+            songDuration: getJoysoundTelopDuration(telopBuffer) * 1000,
+            songPlaytime: getJoysoundOggPlaytime(oggBuffer),
+            songId,
+            oggBuffer,
+            videoPlaytime,
+          };
 
-        resolve(metadata);
+          resolve(metadata);
+        } catch (error) {
+          safeUnlink(videoFilename);
+          reject(
+            new Error(
+              `Invalid Joysound media metadata for song ${songId}: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            ),
+          );
+        }
       } else {
         console.error(
           `Error downloading Joysound video with ID ${songId}: code=${code}, signal=${signal}, log=${ffmpegLogFilename}`,
@@ -853,15 +822,23 @@ function downloadJoysoundDataImpl(
     console.info(`${videoFilename} already exists, not redownloading`);
 
     if (fs.existsSync(telopFilename)) {
-      const telopBuffer = fs.readFileSync(telopFilename);
+      try {
+        const telopBuffer = fs.readFileSync(telopFilename);
+        queueItem = {
+          ...queueItem,
+          playtime: getJoysoundTelopDuration(telopBuffer),
+        };
 
-      queueItem = {
-        ...queueItem,
-        playtime: getSongDuration(telopBuffer.buffer),
-      };
-
-      pushSongToQueue(queueItem, pushToHead);
-      return;
+        pushSongToQueue(queueItem, pushToHead);
+        return;
+      } catch (error) {
+        console.error(
+          `Cached Joysound metadata for song ${songId} is invalid; redownloading:`,
+          error,
+        );
+        safeUnlink(telopFilename);
+        safeUnlink(videoFilename);
+      }
     } else {
       console.error(
         `${videoFilename} already exists, but ${telopFilename} does not.`,
@@ -945,6 +922,11 @@ function downloadJoysoundDataImpl(
         oggBase64.slice(30) + oggBase64.slice(0, 30),
         "base64",
       );
+
+      // Reject corrupt/truncated upstream payloads before launching another
+      // child process. Both parsers provide bounded, stage-specific errors.
+      getJoysoundTelopDuration(telopBuffer);
+      getJoysoundOggPlaytime(oggBuffer);
 
       if (!fs.existsSync(telopFilename)) {
         fs.writeFileSync(telopFilename, telopBuffer);

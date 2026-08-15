@@ -6,6 +6,7 @@ import KuromojiAnalyzer, { AnalyzerResult } from "kuroshiro-analyzer-kuromoji";
 
 import { RUBY_FONT_SIZE, RUBY_FONT_STROKE } from "../common/constants";
 import kanjiToReading from "./dictionary.json";
+import { getJoysoundTelopDuration } from "./joysoundMediaMetadata";
 
 type DictionaryKanji = keyof typeof kanjiToReading;
 
@@ -921,12 +922,10 @@ async function parseJoysoundData(
   };
 }
 
-export function getSongDuration(data: ArrayBufferLike): number {
-  const offsetView = new DataView(data, 6, 4);
-  const metadataOffset = offsetView.getUint32(0, true);
-  const metadataView = new DataView(data, metadataOffset, 20);
-
-  return metadataView.getUint16(18, true);
+export function getSongDuration(
+  data: ArrayBufferLike | ArrayBufferView<ArrayBufferLike>,
+): number {
+  return getJoysoundTelopDuration(data);
 }
 
 export default parseJoysoundData;

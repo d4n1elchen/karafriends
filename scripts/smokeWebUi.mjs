@@ -105,6 +105,17 @@ try {
     remote.click('button[type="submit"]'),
     remote.waitForSelector("header"),
   ]);
+  await remote.click('button[aria-label^="Change nickname"]');
+  await remote.waitForSelector('input[name="nickname"]');
+  assert.equal(
+    await remote.evaluate(() => localStorage.getItem("nickname")),
+    null,
+  );
+  await remote.type('input[name="nickname"]', "Smoke Guest");
+  await Promise.all([
+    remote.click('button[type="submit"]'),
+    remote.waitForSelector("header"),
+  ]);
 
   const disconnectedRemote = await browser.newPage();
   monitorTelemetry(disconnectedRemote);

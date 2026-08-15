@@ -1,6 +1,7 @@
 import React, { FormEvent, useState } from "react";
 import { HashRouter, Route, Routes } from "react-router";
 
+import Button from "./components/Button";
 import ControlBar from "./components/ControlBar";
 import NavBar from "./components/NavBar";
 import useUserIdentity from "./hooks/useUserIdentity";
@@ -28,6 +29,11 @@ const App = () => {
   );
   useQueueNotifications(deviceId);
 
+  const resetNickname = () => {
+    localStorage.removeItem("nickname");
+    setNickname("");
+  };
+
   if (!nickname) {
     const saveNickname = (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -39,11 +45,15 @@ const App = () => {
     };
 
     return (
-      <main className={styles.app}>
-        <form onSubmit={saveNickname}>
-          <h1>Join karaoke</h1>
-          <label htmlFor="nickname">Your nickname</label>
+      <main className={`${styles.app} ${styles.joinScreen}`}>
+        <form className={styles.joinCard} onSubmit={saveNickname}>
+          <p className={styles.joinEyebrow}>Karafriends remote</p>
+          <h1 className={styles.joinTitle}>Join karaoke</h1>
+          <label className={styles.nicknameLabel} htmlFor="nickname">
+            Your nickname
+          </label>
           <input
+            className={styles.nicknameInput}
             id="nickname"
             name="nickname"
             autoComplete="nickname"
@@ -51,7 +61,9 @@ const App = () => {
             required={true}
             autoFocus={true}
           />
-          <button type="submit">Join room</button>
+          <Button full={true} type="submit">
+            Join room
+          </Button>
         </form>
       </main>
     );
@@ -61,7 +73,7 @@ const App = () => {
     <HashRouter>
       <div className={styles.app}>
         <header>
-          <NavBar />
+          <NavBar nickname={nickname} onResetNickname={resetNickname} />
         </header>
         <main>
           <Routes>

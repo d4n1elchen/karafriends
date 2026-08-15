@@ -14,7 +14,7 @@ import { RUBY_FONT_SIZE, RUBY_FONT_STROKE } from "../common/constants";
 
 // XXX: These should be in their own file
 
-const vsSource = `#version 300 es
+const vsSourceWebGL2 = `#version 300 es
   in vec2 a_position;
   in vec2 a_texCoord;
   in float a_scroll;
@@ -38,7 +38,7 @@ const vsSource = `#version 300 es
   }
 `;
 
-const fsSource = `#version 300 es
+const fsSourceWebGL2 = `#version 300 es
   precision highp float;
 
   uniform sampler2D u_image;
@@ -63,6 +63,92 @@ const fsSource = `#version 300 es
     }
   }
 `;
+
+const vsSourceWebGL1 = `
+  attribute vec2 a_position;
+  attribute vec2 a_texCoord;
+  attribute float a_scroll;
+  attribute float a_scrollType;
+
+  uniform vec2 u_resolution;
+
+  varying vec2 v_texCoord;
+  varying vec2 v_position;
+  varying float v_scroll;
+  varying float v_scrollType;
+
+  void main() {
+    vec2 clipSpace = (a_position / u_resolution) * 2.0 - 1.0;
+    gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
+
+    v_texCoord = a_texCoord;
+    v_position = a_position;
+    v_scroll = a_scroll;
+    v_scrollType = a_scrollType;
+  }
+`;
+
+const fsSourceWebGL1 = `
+  precision highp float;
+
+  uniform sampler2D u_image;
+
+  varying vec2 v_texCoord;
+  varying vec2 v_position;
+  varying float v_scroll;
+  varying float v_scrollType;
+
+  void main() {
+    vec4 textureColor = texture2D(u_image, v_texCoord);
+
+    if (
+      (v_scrollType == 0.0 && v_position.x <= v_scroll) ||
+      (v_scrollType == 1.0 && v_position.x > v_scroll)
+    ) {
+      gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
+    } else {
+      gl_FragColor = textureColor;
+    }
+  }
+`;
+
+type JoysoundGLRenderingContext =
+  WebGLRenderingContext | WebGL2RenderingContext;
+
+interface JoysoundGLContext {
+  gl: JoysoundGLRenderingContext;
+  fragmentShaderSource: string;
+  vertexShaderSource: string;
+}
+
+function getJoysoundGLContext(
+  canvas: HTMLCanvasElement,
+): JoysoundGLContext | null {
+  const attributes: WebGLContextAttributes = {
+    antialias: false,
+    premultipliedAlpha: false,
+  };
+  const webGL2 = canvas.getContext("webgl2", attributes);
+  if (webGL2) {
+    return {
+      gl: webGL2,
+      fragmentShaderSource: fsSourceWebGL2,
+      vertexShaderSource: vsSourceWebGL2,
+    };
+  }
+
+  const webGL1 = canvas.getContext("webgl", attributes);
+  if (webGL1) {
+    console.info("Joysound renderer is using the WebGL 1 fallback");
+    return {
+      gl: webGL1,
+      fragmentShaderSource: fsSourceWebGL1,
+      vertexShaderSource: vsSourceWebGL1,
+    };
+  }
+
+  return null;
+}
 
 // XXX: Move these to some setting somewhere?
 // XXX: RUBY_FONT_SIZE and RUBY_FONT_STROKE live in src/common/constants.ts for *reasons*
@@ -126,7 +212,7 @@ function getFontFace(fontCode: number): string {
 }
 
 function createShader(
-  gl: WebGL2RenderingContext,
+  gl: JoysoundGLRenderingContext,
   type:
     | WebGLRenderingContextBase["VERTEX_SHADER"]
     | WebGLRenderingContextBase["FRAGMENT_SHADER"],
@@ -142,7 +228,7 @@ function createShader(
 }
 
 function createProgram(
-  gl: WebGL2RenderingContext,
+  gl: JoysoundGLRenderingContext,
   vertexShader: WebGLShader,
   fragmentShader: WebGLShader,
 ) {
@@ -166,7 +252,7 @@ function quadToTriangles(
 }
 
 function createTextureFromImage(
-  gl: WebGL2RenderingContext,
+  gl: JoysoundGLRenderingContext,
   bitmap: HTMLCanvasElement,
 ): WebGLTexture {
   const texture = gl.createTexture();
@@ -297,7 +383,7 @@ function drawTitleRowsToCanvas(
 }
 
 function createTitleTexture(
-  gl: WebGL2RenderingContext,
+  gl: JoysoundGLRenderingContext,
   metadata: JoysoundMetadata,
   isRomaji: boolean,
 ): WebGLTexture {
@@ -408,7 +494,7 @@ function createTitleTexture(
 }
 
 function createLyricsBlockTexture(
-  gl: WebGL2RenderingContext,
+  gl: JoysoundGLRenderingContext,
   textCtx: CanvasRenderingContext2D,
   lyricsBlock: JoysoundLyricsBlock,
   fillColor: number[],
@@ -605,7 +691,7 @@ function drawRomajiTextToCanvas(
 }
 
 function createLyricsBlockTextures(
-  gl: WebGL2RenderingContext,
+  gl: JoysoundGLRenderingContext,
   lyricsData: JoysoundLyricsBlock[],
   isRomaji: boolean,
 ): LyricsBlockTextures[] {
@@ -683,7 +769,7 @@ function getScrollXPos(
 }
 
 function drawTitle(
-  gl: WebGL2RenderingContext,
+  gl: JoysoundGLRenderingContext,
   glBuffers: JoysoundDisplayBuffers,
   titleTexture: WebGLTexture,
 ): void {
@@ -700,7 +786,7 @@ function drawTitle(
 }
 
 function drawLyricsTexture(
-  gl: WebGL2RenderingContext,
+  gl: JoysoundGLRenderingContext,
   glBuffers: JoysoundDisplayBuffers,
   texture: WebGLTexture,
   positions: number[],
@@ -731,7 +817,7 @@ function drawLyricsTexture(
 }
 
 function drawLyricsBlock(
-  gl: WebGL2RenderingContext,
+  gl: JoysoundGLRenderingContext,
   glBuffers: JoysoundDisplayBuffers,
   lyricsBlock: JoysoundLyricsBlock,
   lyricsBlockTextures: LyricsBlockTextures[],
@@ -805,13 +891,9 @@ export default function JoysoundRenderer(props: {
     EXPAND_RATE_X = canvasElement.width / SCREEN_WIDTH;
     EXPAND_RATE_Y = canvasElement.height / SCREEN_HEIGHT;
 
-    const gl = canvasElement.getContext("webgl2", {
-      antialias: false,
-      premultipliedAlpha: false,
-    });
-
-    invariant(gl);
-    gl.viewport(0, 0, canvasElement.width, canvasElement.height);
+    const glContext = getJoysoundGLContext(canvasElement);
+    invariant(glContext, "This browser does not support WebGL");
+    glContext.gl.viewport(0, 0, canvasElement.width, canvasElement.height);
   };
 
   useEffect(() => {
@@ -830,11 +912,9 @@ export default function JoysoundRenderer(props: {
       const timeline = joysoundData.timeline;
 
       invariant(canvasRef.current);
-      const gl = canvasRef.current.getContext("webgl2", {
-        antialias: false,
-        premultipliedAlpha: false,
-      });
-      invariant(gl);
+      const glContext = getJoysoundGLContext(canvasRef.current);
+      invariant(glContext, "This browser does not support WebGL");
+      const { gl, fragmentShaderSource, vertexShaderSource } = glContext;
 
       const titleTexture = createTitleTexture(gl, metadata, props.isRomaji);
       const lyricsBlockTextures = createLyricsBlockTextures(
@@ -843,8 +923,16 @@ export default function JoysoundRenderer(props: {
         props.isRomaji,
       );
 
-      const vertexShader = createShader(gl, gl.VERTEX_SHADER, vsSource);
-      const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+      const vertexShader = createShader(
+        gl,
+        gl.VERTEX_SHADER,
+        vertexShaderSource,
+      );
+      const fragmentShader = createShader(
+        gl,
+        gl.FRAGMENT_SHADER,
+        fragmentShaderSource,
+      );
 
       const program = createProgram(gl, vertexShader, fragmentShader);
 

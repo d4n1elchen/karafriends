@@ -19,9 +19,9 @@
 
 .appSidebar {
   display: flex;
-  flex: 0 0 clamp(11rem, 11vw, 13rem);
+  flex: 0 0 15vw;
   flex-direction: column;
-  width: clamp(11rem, 11vw, 13rem);
+  width: 15vw;
   min-width: 0;
   overflow: hidden;
 }

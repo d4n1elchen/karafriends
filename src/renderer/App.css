@@ -19,16 +19,16 @@
 
 .appSidebar {
   display: flex;
-  flex: 0 0 clamp(14rem, 15vw, 17rem);
+  flex: 0 0 clamp(11rem, 11vw, 13rem);
   flex-direction: column;
-  width: clamp(14rem, 15vw, 17rem);
+  width: clamp(11rem, 11vw, 13rem);
   min-width: 0;
   overflow: hidden;
 }
 
 .appSidebar .qrcode {
   align-self: center;
-  max-width: 15rem;
+  max-width: 13rem;
   flex: 0 1 auto;
 }
 
@@ -39,10 +39,45 @@
   font-size: 1.25rem;
 }
 
+.appSidebarSectionToggle {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  height: 3.5rem;
+  padding: 0 0.75rem;
+  border: 0;
+  background: #ee6e73;
+  box-shadow:
+    0 2px 2px 0 rgb(0 0 0 / 14%),
+    0 3px 1px -2px rgb(0 0 0 / 12%),
+    0 1px 5px 0 rgb(0 0 0 / 20%);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.25rem;
+}
+
+.appSidebarSectionToggle:focus-visible {
+  outline: 3px solid #26c6da;
+  outline-offset: -3px;
+}
+
+.appSidebarChevron {
+  display: inline-block;
+  transition: transform 160ms ease;
+}
+
+.appSidebarChevronExpanded {
+  transform: rotate(180deg);
+}
+
 .appSettings {
   flex: 0 0 auto;
   width: 100%;
-  padding: 1rem 1.25rem !important;
+  padding: 0.75rem !important;
 }
 
 .appSettings .input-field,

@@ -41,6 +41,7 @@ function App(props: {
     window.karafriends.isDesktop ? HOSTNAME : window.location.host,
   );
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [started, setStarted] = useState(window.karafriends.isDesktop);
 
   const setMics = (newMics: InputDevice[]) => {
@@ -137,24 +138,45 @@ function App(props: {
       {sidebarVisible && (
         <aside className="appSidebar grey lighten-3">
           <QRCode hostname={hostname} />
-          <nav className="center-align">Settings</nav>
-          <div className="appSettings section center-align">
-            <HostnameSetting hostname={hostname} onChange={setHostname} />
-            {mics.map((mic, i) => (
+          <button
+            className="appSidebarSectionToggle"
+            type="button"
+            aria-controls="player-settings"
+            aria-expanded={settingsExpanded}
+            onClick={() => setSettingsExpanded((expanded) => !expanded)}
+          >
+            <span>Settings</span>
+            <span
+              className={`appSidebarChevron ${
+                settingsExpanded ? "appSidebarChevronExpanded" : ""
+              }`}
+              aria-hidden="true"
+            >
+              &#9662;
+            </span>
+          </button>
+          {settingsExpanded && (
+            <div
+              id="player-settings"
+              className="appSettings section center-align"
+            >
+              <HostnameSetting hostname={hostname} onChange={setHostname} />
+              {mics.map((mic, i) => (
+                <MicrophoneSetting
+                  key={mic.deviceId}
+                  onChange={onChangeMic.bind(null, i)}
+                  mic={mic}
+                />
+              ))}
               <MicrophoneSetting
-                key={mic.deviceId}
-                onChange={onChangeMic.bind(null, i)}
-                mic={mic}
+                onChange={onChangeMic.bind(null, mics.length)}
+                mic={null}
               />
-            ))}
-            <MicrophoneSetting
-              onChange={onChangeMic.bind(null, mics.length)}
-              mic={null}
-            />
-            <button className="btn" onClick={clearMics}>
-              Clear mics
-            </button>
-          </div>
+              <button className="btn" onClick={clearMics}>
+                Clear mics
+              </button>
+            </div>
+          )}
           <nav className="center-align">Queue</nav>
           <Queue />
         </aside>

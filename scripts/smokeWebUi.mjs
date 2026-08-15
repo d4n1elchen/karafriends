@@ -63,11 +63,23 @@ try {
     sidebarWidth: document.querySelector(".appSidebar").clientWidth,
     viewportWidth: window.innerWidth,
   }));
-  assert.ok(playerLayout.sidebarWidth >= 180, "sidebar should remain readable");
+  assert.ok(playerLayout.sidebarWidth >= 150, "sidebar should remain readable");
   assert.equal(
     playerLayout.pageWidth,
     playerLayout.viewportWidth,
     "player layout should not overflow horizontally",
+  );
+  const settingsToggle = 'button[aria-controls="player-settings"]';
+  assert.equal(
+    await page.$eval(settingsToggle, (button) => button.ariaExpanded),
+    "false",
+  );
+  assert.equal(await page.$("#player-settings"), null);
+  await page.click(settingsToggle);
+  await page.waitForSelector("#player-settings");
+  assert.equal(
+    await page.$eval(settingsToggle, (button) => button.ariaExpanded),
+    "true",
   );
 
   const noAudioWorkletPage = await browser.newPage();

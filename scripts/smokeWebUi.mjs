@@ -64,9 +64,9 @@ try {
     viewportWidth: window.innerWidth,
   }));
   assert.ok(
-    Math.abs(playerLayout.sidebarWidth / playerLayout.viewportWidth - 0.15) <
+    Math.abs(playerLayout.sidebarWidth / playerLayout.viewportWidth - 0.1) <
       0.01,
-    "sidebar should use approximately 15% of the viewport",
+    "sidebar should use approximately 10% of the viewport",
   );
   assert.equal(
     playerLayout.pageWidth,
@@ -81,9 +81,20 @@ try {
   assert.equal(await page.$("#player-settings"), null);
   await page.click(settingsToggle);
   await page.waitForSelector("#player-settings");
+  const expandedSettings = await page.evaluate(() => {
+    const settings = document.querySelector("#player-settings");
+    return {
+      clientWidth: settings.clientWidth,
+      scrollWidth: settings.scrollWidth,
+    };
+  });
   assert.equal(
     await page.$eval(settingsToggle, (button) => button.ariaExpanded),
     "true",
+  );
+  assert.ok(
+    expandedSettings.scrollWidth <= expandedSettings.clientWidth,
+    "expanded settings should not overflow horizontally",
   );
 
   const noAudioWorkletPage = await browser.newPage();

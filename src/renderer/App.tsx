@@ -136,7 +136,11 @@ function App(props: {
         <Effects />
       </div>
       {sidebarVisible && (
-        <aside className="appSidebar grey lighten-3">
+        <aside
+          className={`appSidebar grey lighten-3 ${
+            settingsExpanded ? "appSidebarSettingsExpanded" : ""
+          }`}
+        >
           <QRCode hostname={hostname} />
           <button
             className="appSidebarSectionToggle"

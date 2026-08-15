@@ -19,11 +19,16 @@
 
 .appSidebar {
   display: flex;
-  flex: 0 0 15vw;
+  flex: 0 0 10vw;
   flex-direction: column;
-  width: 15vw;
+  width: 10vw;
   min-width: 0;
   overflow: hidden;
+}
+
+.appSidebarSettingsExpanded {
+  flex-basis: max(10vw, 12rem);
+  width: max(10vw, 12rem);
 }
 
 .appSidebar .qrcode {

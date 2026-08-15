@@ -1,6 +1,22 @@
 export const CLIENT_ERROR_EVENT = "karafriends:client-error";
 export const CLIENT_RECOVERED_EVENT = "karafriends:client-recovered";
 
+let currentClientError: string | null = null;
+const statusListeners = new Set<() => void>();
+
+function notifyStatusListeners(): void {
+  statusListeners.forEach((listener) => listener());
+}
+
+export function getClientError(): string | null {
+  return currentClientError;
+}
+
+export function subscribeClientStatus(listener: () => void): () => void {
+  statusListeners.add(listener);
+  return () => statusListeners.delete(listener);
+}
+
 export function toUserErrorMessage(reason: unknown): string {
   if (reason instanceof DOMException && reason.name === "AbortError") {
     return "The karaoke server took too long to respond.";
@@ -20,15 +36,19 @@ export function toUserErrorMessage(reason: unknown): string {
 }
 
 export function reportClientError(reason: unknown): void {
+  currentClientError = toUserErrorMessage(reason);
+  notifyStatusListeners();
   if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent<string>(CLIENT_ERROR_EVENT, {
-      detail: toUserErrorMessage(reason),
+      detail: currentClientError,
     }),
   );
 }
 
 export function reportClientRecovered(): void {
+  currentClientError = null;
+  notifyStatusListeners();
   if (typeof window === "undefined") return;
   window.dispatchEvent(new Event(CLIENT_RECOVERED_EVENT));
 }

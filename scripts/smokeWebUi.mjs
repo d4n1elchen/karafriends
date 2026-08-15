@@ -24,7 +24,18 @@ const browser = await puppeteer.launch({
 });
 
 try {
+  const telemetryRequests = [];
+  const monitorTelemetry = (targetPage) => {
+    targetPage.on("request", (request) => {
+      const hostname = new URL(request.url()).hostname;
+      if (hostname === "sentry.io" || hostname.endsWith(".sentry.io")) {
+        telemetryRequests.push(request.url());
+      }
+    });
+  };
+
   const page = await browser.newPage();
+  monitorTelemetry(page);
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error));
 
@@ -49,6 +60,7 @@ try {
   await page.waitForSelector("canvas.qrcode");
 
   const remote = await browser.newPage();
+  monitorTelemetry(remote);
   remote.on("pageerror", (error) => pageErrors.push(error));
   await remote.goto(`${baseUrl}/remocon/?room=${encodeURIComponent(roomId)}`, {
     waitUntil: "networkidle0",
@@ -61,6 +73,7 @@ try {
   ]);
 
   const disconnectedRemote = await browser.newPage();
+  monitorTelemetry(disconnectedRemote);
   await disconnectedRemote.setRequestInterception(true);
   disconnectedRemote.on("request", (request) => {
     if (request.url().endsWith("/graphql") && request.method() === "POST") {
@@ -85,6 +98,7 @@ try {
   );
 
   const failedPage = await browser.newPage();
+  monitorTelemetry(failedPage);
   await failedPage.setRequestInterception(true);
   failedPage.on("request", (request) => {
     if (request.url().endsWith("/graphql") && request.method() === "POST") {
@@ -109,6 +123,11 @@ try {
   assert.equal(retryLabel, "Try again");
 
   assert.deepEqual(pageErrors, []);
+  assert.deepEqual(
+    telemetryRequests,
+    [],
+    "browser telemetry should be disabled without an explicit DSN",
+  );
   console.log(
     `Web UI smoke passed: launcher, player, remote room ${roomId}, and recoverable network failures.`,
   );

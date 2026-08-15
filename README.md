@@ -39,6 +39,11 @@ yarn debug-web
 To save the output in PowerShell, run
 `yarn debug-web 2>&1 | Tee-Object data/server-debug.log`.
 
+Browser error telemetry is disabled by default. To opt in, set
+`KARAFRIENDS_SENTRY_DSN` before building the web clients. Set
+`KARAFRIENDS_SENTRY_DEBUG=1` as well only when diagnosing the telemetry client
+itself.
+
 Then open:
 
 - Room launcher: `http://localhost:8080/`

@@ -1,30 +1,28 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useSyncExternalStore } from "react";
 
 import {
-  CLIENT_ERROR_EVENT,
-  CLIENT_RECOVERED_EVENT,
+  getClientError,
+  reportClientError,
+  reportClientRecovered,
+  subscribeClientStatus,
 } from "../../../common/clientError";
 import * as styles from "./ConnectionBanner.module.scss";
 
 export default function ConnectionBanner() {
-  const [message, setMessage] = useState<string | null>(() =>
-    navigator.onLine ? null : "This phone is offline.",
+  const message = useSyncExternalStore(
+    subscribeClientStatus,
+    getClientError,
+    getClientError,
   );
 
   useEffect(() => {
-    const handleError = (event: Event) =>
-      setMessage((event as CustomEvent<string>).detail);
-    const handleRecovered = () => setMessage(null);
-    const handleOffline = () => setMessage("This phone is offline.");
+    const handleOffline = () => reportClientError("This phone is offline.");
+    if (!navigator.onLine) handleOffline();
 
-    window.addEventListener(CLIENT_ERROR_EVENT, handleError);
-    window.addEventListener(CLIENT_RECOVERED_EVENT, handleRecovered);
-    window.addEventListener("online", handleRecovered);
+    window.addEventListener("online", reportClientRecovered);
     window.addEventListener("offline", handleOffline);
     return () => {
-      window.removeEventListener(CLIENT_ERROR_EVENT, handleError);
-      window.removeEventListener(CLIENT_RECOVERED_EVENT, handleRecovered);
-      window.removeEventListener("online", handleRecovered);
+      window.removeEventListener("online", reportClientRecovered);
       window.removeEventListener("offline", handleOffline);
     };
   }, []);

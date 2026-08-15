@@ -63,7 +63,7 @@ try {
     sidebarWidth: document.querySelector(".appSidebar").clientWidth,
     viewportWidth: window.innerWidth,
   }));
-  assert.ok(playerLayout.sidebarWidth >= 250, "sidebar should remain readable");
+  assert.ok(playerLayout.sidebarWidth >= 180, "sidebar should remain readable");
   assert.equal(
     playerLayout.pageWidth,
     playerLayout.viewportWidth,

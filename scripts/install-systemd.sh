@@ -91,11 +91,19 @@ fi
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
 SERVER_ENTRY="$PROJECT_ROOT/build/web/web-server/index.js"
+PNP_LOADER="$PROJECT_ROOT/.pnp.cjs"
+PNP_ESM_LOADER="$PROJECT_ROOT/.pnp.loader.mjs"
 DATA_DIR="$PROJECT_ROOT/data"
 
 if [[ ! -f "$SERVER_ENTRY" ]]; then
   echo "The web server has not been built: $SERVER_ENTRY" >&2
   echo "Run 'yarn install --immutable && yarn build-web' as your normal user first." >&2
+  exit 1
+fi
+
+if [[ ! -f "$PNP_LOADER" || ! -f "$PNP_ESM_LOADER" ]]; then
+  echo "Yarn's dependency loaders were not found under $PROJECT_ROOT" >&2
+  echo "Run 'yarn install --immutable' as your normal user first." >&2
   exit 1
 fi
 
@@ -123,6 +131,8 @@ systemd_quote() {
 
 PROJECT_ROOT_Q="$(systemd_quote "$PROJECT_ROOT")"
 SERVER_ENTRY_Q="$(systemd_quote "$SERVER_ENTRY")"
+PNP_LOADER_Q="$(systemd_quote "$PNP_LOADER")"
+PNP_ESM_LOADER_Q="$(systemd_quote "$PNP_ESM_LOADER")"
 DATA_DIR_Q="$(systemd_quote "$DATA_DIR")"
 NODE_BIN_Q="$(systemd_quote "$NODE_BIN")"
 ENV_PATH_Q="$(systemd_quote "$ENV_PATH")"
@@ -136,6 +146,7 @@ if [[ ! -e "$ENV_PATH" ]]; then
 #   sudo systemctl restart $SERVICE_NAME
 KARAFRIENDS_HOST=0.0.0.0
 KARAFRIENDS_REMOCON_PORT=8080
+# KARAFRIENDS_ADMIN_PASSWORD=replace-with-a-long-password
 # KARAFRIENDS_PUBLIC_URL=https://karaoke.example.com
 # KARAFRIENDS_TRUST_PROXY=1
 EOF
@@ -159,7 +170,7 @@ WorkingDirectory="$PROJECT_ROOT_Q"
 Environment=NODE_ENV=production
 Environment="KARAFRIENDS_DATA_DIR=$DATA_DIR_Q"
 EnvironmentFile=-"$ENV_PATH_Q"
-ExecStart="$NODE_BIN_Q" "$SERVER_ENTRY_Q"
+ExecStart="$NODE_BIN_Q" --require "$PNP_LOADER_Q" --experimental-loader "$PNP_ESM_LOADER_Q" "$SERVER_ENTRY_Q"
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=20s
@@ -190,4 +201,3 @@ echo "Unit:        $UNIT_PATH"
 echo "Environment: $ENV_PATH"
 echo "Data:        $DATA_DIR"
 echo "Logs:        journalctl -u $SERVICE_NAME -f"
-

@@ -1,5 +1,4 @@
-import M from "materialize-css";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 import "./global";
 import { InputDevice, InputDeviceOption } from "./nativeAudio";
@@ -32,7 +31,6 @@ export default function MicrophoneSetting({ mic, onChange }: Props) {
   const [devices, setDevices] = useState<InputDeviceOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const selectRef = useRef<HTMLSelectElement>(null);
 
   const refreshDevices = async (requestPermission: boolean) => {
     setLoading(true);
@@ -53,12 +51,6 @@ export default function MicrophoneSetting({ mic, onChange }: Props) {
       void refreshDevices(false);
     }
   }, []);
-
-  useEffect(() => {
-    if (!selectRef.current) return;
-    const instance = M.FormSelect.init(selectRef.current);
-    return () => instance.destroy();
-  }, [devices, mic]);
 
   const enableBrowserMicrophone = async () => {
     setLoading(true);
@@ -98,9 +90,16 @@ export default function MicrophoneSetting({ mic, onChange }: Props) {
   }
 
   return (
-    <div className="input-field">
+    <div className="microphoneSetting">
+      <label
+        className="microphoneSettingLabel"
+        htmlFor={`mic-${mic?.deviceId || "new"}`}
+      >
+        Microphone
+      </label>
       <select
-        ref={selectRef}
+        id={`mic-${mic?.deviceId || "new"}`}
+        className="browser-default microphoneSettingSelect"
         value={mic ? `${mic.deviceId}_${mic.channelSelection}` : ""}
         onChange={(e) => {
           const dataset = e.target.options[e.target.selectedIndex].dataset;
@@ -137,7 +136,7 @@ export default function MicrophoneSetting({ mic, onChange }: Props) {
           )),
         )}
       </select>
-      <label>Microphone</label>
+      {mic && <span className="microphoneSettingStatus">Mic active</span>}
       {error && <p role="alert">{error}</p>}
     </div>
   );

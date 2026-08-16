@@ -84,6 +84,37 @@
   width: 100%;
 }
 
+.microphoneSetting {
+  margin-top: 0.75rem;
+  text-align: left;
+}
+
+.microphoneSettingLabel,
+.microphoneSettingStatus {
+  display: block;
+  position: static;
+  width: 100%;
+  color: #757575;
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
+
+.microphoneSettingSelect.browser-default {
+  display: block;
+  height: 2.5rem;
+  margin-top: 0.25rem;
+  padding: 0 0.4rem;
+  border: 1px solid #9e9e9e;
+  border-radius: 2px;
+  background-color: #fff;
+  color: #212121;
+}
+
+.microphoneSettingStatus {
+  margin-top: 0.25rem;
+  color: #2e7d32;
+}
+
 .appSettings .btn {
   width: 100%;
   height: auto;

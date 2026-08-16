@@ -23,6 +23,8 @@ export class InputDevice {
   private source: MediaStreamAudioSourceNode | null = null;
   private splitter: ChannelSplitterNode | null = null;
   private analyser: AnalyserNode | null = null;
+  private monitorGain: GainNode | null = null;
+  private monitorCompressor: DynamicsCompressorNode | null = null;
   private samples: Float32Array<ArrayBuffer> | null = null;
 
   private constructor(option: InputDeviceOption, channelSelection: number) {
@@ -102,7 +104,7 @@ export class InputDevice {
       },
       video: false,
     });
-    this.audioContext = new AudioContext();
+    this.audioContext = new AudioContext({ latencyHint: "interactive" });
     await this.audioContext.resume();
     this.source = this.audioContext.createMediaStreamSource(this.stream);
     this.splitter = this.audioContext.createChannelSplitter(
@@ -111,9 +113,20 @@ export class InputDevice {
     this.analyser = this.audioContext.createAnalyser();
     this.analyser.fftSize = 4096;
     this.analyser.smoothingTimeConstant = 0;
+    this.monitorGain = this.audioContext.createGain();
+    this.monitorGain.gain.value = 1;
+    this.monitorCompressor = this.audioContext.createDynamicsCompressor();
+    this.monitorCompressor.threshold.value = -12;
+    this.monitorCompressor.knee.value = 12;
+    this.monitorCompressor.ratio.value = 4;
+    this.monitorCompressor.attack.value = 0.003;
+    this.monitorCompressor.release.value = 0.25;
     this.samples = new Float32Array(this.analyser.fftSize);
     this.source.connect(this.splitter);
     this.splitter.connect(this.analyser, this.channelSelection);
+    this.splitter.connect(this.monitorGain, this.channelSelection, 0);
+    this.monitorGain.connect(this.monitorCompressor);
+    this.monitorCompressor.connect(this.audioContext.destination);
   }
 
   getPitch(): PitchSample {
@@ -138,6 +151,8 @@ export class InputDevice {
     this.source?.disconnect();
     this.splitter?.disconnect();
     this.analyser?.disconnect();
+    this.monitorGain?.disconnect();
+    this.monitorCompressor?.disconnect();
     this.stream?.getTracks().forEach((track) => track.stop());
     void this.audioContext?.close();
     this.stream = null;
@@ -145,6 +160,8 @@ export class InputDevice {
     this.source = null;
     this.splitter = null;
     this.analyser = null;
+    this.monitorGain = null;
+    this.monitorCompressor = null;
     this.samples = null;
   }
 }

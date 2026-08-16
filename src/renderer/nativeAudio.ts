@@ -8,14 +8,6 @@ export interface InputDeviceOption {
   channelCount: number;
 }
 
-function microphoneDebug(message: string, detail?: unknown): void {
-  if (detail === undefined) {
-    console.info(`[microphone:debug] ${message}`);
-  } else {
-    console.info(`[microphone:debug] ${message}`, detail);
-  }
-}
-
 const registry = new FinalizationRegistry<number>((deviceId) => {
   window.karafriends.nativeAudio.inputDevice_delete(deviceId);
 });
@@ -34,7 +26,6 @@ export class InputDevice {
   private monitorGain: GainNode | null = null;
   private monitorCompressor: DynamicsCompressorNode | null = null;
   private samples: Float32Array<ArrayBuffer> | null = null;
-  private debugLevelTimer: number | null = null;
 
   private constructor(option: InputDeviceOption, channelSelection: number) {
     this.deviceId = option.id;
@@ -62,13 +53,6 @@ export class InputDevice {
       );
     }
 
-    microphoneDebug("checking browser microphones", {
-      origin: window.location.origin,
-      secureContext: window.isSecureContext,
-      requestPermission,
-      userAgent: navigator.userAgent,
-    });
-
     let grantedDevice: InputDeviceOption | undefined;
     if (requestPermission) {
       const permissionStream = await navigator.mediaDevices.getUserMedia({
@@ -76,11 +60,6 @@ export class InputDevice {
         video: false,
       });
       const grantedTrack = permissionStream.getAudioTracks()[0];
-      microphoneDebug("permission stream opened", {
-        audioTrackCount: permissionStream.getAudioTracks().length,
-        label: grantedTrack?.label || "",
-        settings: grantedTrack?.getSettings(),
-      });
       if (grantedTrack) {
         const settings = grantedTrack.getSettings();
         grantedDevice = {
@@ -96,14 +75,6 @@ export class InputDevice {
     }
 
     const devices = await navigator.mediaDevices.enumerateDevices();
-    microphoneDebug(
-      "enumerateDevices completed",
-      devices.map((device) => ({
-        kind: device.kind,
-        label: device.label,
-        hasDeviceId: Boolean(device.deviceId),
-      })),
-    );
     const inputDevices = devices
       .filter((device) => device.kind === "audioinput")
       .map((device, index) => ({
@@ -145,24 +116,12 @@ export class InputDevice {
     if (window.karafriends.isDesktop) return undefined;
 
     const audioContext = new AudioContext({ latencyHint: "interactive" });
-    microphoneDebug("prepared AudioContext", {
-      state: audioContext.state,
-      sampleRate: audioContext.sampleRate,
-    });
     // This must happen synchronously inside the click handler. Waiting for a
     // permission prompt first can consume the browser's user activation and
     // leave the monitoring context suspended on a new HTTPS origin.
-    void audioContext.resume().then(
-      () =>
-        microphoneDebug("prepared AudioContext resume completed", {
-          state: audioContext.state,
-        }),
-      (reason) =>
-        console.error(
-          "[microphone:debug] prepared AudioContext resume failed",
-          reason,
-        ),
-    );
+    void audioContext.resume().catch(() => {
+      // startBrowserInput retries and reports the error after permission.
+    });
     return audioContext;
   }
 
@@ -170,11 +129,6 @@ export class InputDevice {
     browserDeviceId: string,
     preparedAudioContext?: AudioContext,
   ): Promise<void> {
-    microphoneDebug("requesting selected microphone", {
-      hasDeviceId: Boolean(browserDeviceId),
-      channelSelection: this.channelSelection,
-      preparedAudioContextState: preparedAudioContext?.state,
-    });
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         autoGainControl: false,
@@ -185,35 +139,9 @@ export class InputDevice {
       },
       video: false,
     });
-    const track = this.stream.getAudioTracks()[0];
-    microphoneDebug("selected microphone stream opened", {
-      audioTrackCount: this.stream.getAudioTracks().length,
-      label: track?.label || "",
-      enabled: track?.enabled,
-      muted: track?.muted,
-      readyState: track?.readyState,
-      settings: track?.getSettings(),
-    });
-    if (track) {
-      track.addEventListener("mute", () =>
-        microphoneDebug("microphone track muted"),
-      );
-      track.addEventListener("unmute", () =>
-        microphoneDebug("microphone track unmuted"),
-      );
-      track.addEventListener("ended", () =>
-        microphoneDebug("microphone track ended"),
-      );
-    }
     this.audioContext =
       preparedAudioContext || new AudioContext({ latencyHint: "interactive" });
     await this.audioContext.resume();
-    microphoneDebug("monitoring AudioContext resumed", {
-      state: this.audioContext.state,
-      sampleRate: this.audioContext.sampleRate,
-      baseLatency: this.audioContext.baseLatency,
-      outputLatency: this.audioContext.outputLatency,
-    });
     if (this.audioContext.state !== "running") {
       throw new Error(
         "The browser blocked microphone playback. Tap Enable microphone again.",
@@ -240,20 +168,6 @@ export class InputDevice {
     this.splitter.connect(this.monitorGain, this.channelSelection, 0);
     this.monitorGain.connect(this.monitorCompressor);
     this.monitorCompressor.connect(this.audioContext.destination);
-    microphoneDebug("microphone monitoring graph connected");
-    this.debugLevelTimer = window.setInterval(() => {
-      if (!this.analyser || !this.samples) return;
-      this.analyser.getFloatTimeDomainData(this.samples);
-      const meanSquare =
-        this.samples.reduce((sum, sample) => sum + sample * sample, 0) /
-        this.samples.length;
-      microphoneDebug("input level", {
-        rms: Number(Math.sqrt(meanSquare).toFixed(4)),
-        contextState: this.audioContext?.state,
-        trackMuted: track?.muted,
-        trackReadyState: track?.readyState,
-      });
-    }, 1000);
   }
 
   getPitch(): PitchSample {
@@ -280,10 +194,6 @@ export class InputDevice {
     this.analyser?.disconnect();
     this.monitorGain?.disconnect();
     this.monitorCompressor?.disconnect();
-    if (this.debugLevelTimer !== null) {
-      window.clearInterval(this.debugLevelTimer);
-      this.debugLevelTimer = null;
-    }
     this.stream?.getTracks().forEach((track) => track.stop());
     void this.audioContext?.close();
     this.stream = null;
@@ -294,6 +204,5 @@ export class InputDevice {
     this.monitorGain = null;
     this.monitorCompressor = null;
     this.samples = null;
-    microphoneDebug("microphone stopped");
   }
 }

@@ -81,7 +81,6 @@ export default function MicrophoneSetting({ mic, onChange }: Props) {
       onChange(await InputDevice.create(defaultDevice, 0, audioContext));
     } catch (reason) {
       void audioContext?.close();
-      console.error("[microphone:debug] enable failed", reason);
       setError(
         reason instanceof Error ? reason.message : "Microphone access failed",
       );
@@ -131,14 +130,13 @@ export default function MicrophoneSetting({ mic, onChange }: Props) {
           setError(null);
           InputDevice.create(option, parseInt(dataset.channel!, 10))
             .then(onChange)
-            .catch((reason) => {
-              console.error("[microphone:debug] device change failed", reason);
+            .catch((reason) =>
               setError(
                 reason instanceof Error
                   ? reason.message
                   : "Microphone access failed",
-              );
-            })
+              ),
+            )
             .finally(() => setLoading(false));
         }}
         disabled={loading}

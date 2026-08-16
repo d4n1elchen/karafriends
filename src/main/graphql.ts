@@ -30,6 +30,7 @@ import rawSchema from "inline-string:../common/schema.graphql";
 import karafriendsConfig, { KarafriendsConfig } from "../common/config";
 import { debugError } from "../common/debug";
 import { normalizeRoomId } from "../common/roomIdCore";
+import { getYoutubeMetadataWithYtDlp } from "../common/youtubeMetadata";
 import {
   downloadDamVideo,
   downloadJoysoundData,
@@ -125,6 +126,7 @@ interface YoutubeVideoInfo extends VideoInfo {
   readonly __typename: "YoutubeVideoInfo";
   readonly captionLanguages: CaptionLanguage[];
   readonly keywords: string[];
+  readonly gainValue: number;
 }
 
 interface YoutubeVideoInfoError {
@@ -858,51 +860,75 @@ const resolvers = {
         },
       };
     },
-    youtubeVideoInfo: (
+    youtubeVideoInfo: async (
       _: any,
       args: { videoId: string },
       { dataSources }: IGraphQLContext,
     ): Promise<YoutubeVideoInfoResult> => {
-      return (
-        dataSources.youtube
-          .getBasicInfo(args.videoId)
-          // youtubei.js's response is loosely/partially typed and its shape
-          // shifts between versions, so treat it as untyped here.
-          .then((data: any) => {
-            if (data.playability_status?.status !== "OK") {
-              return {
-                __typename: "YoutubeVideoInfoError",
-                reason: data.playability_status?.reason ?? "Unknown",
-              };
-            }
+      let youtubeJsReason = "Unknown";
+      try {
+        // youtubei.js's response is loosely/partially typed and its shape
+        // shifts between versions, so treat it as untyped here.
+        const data: any = await dataSources.youtube.getBasicInfo(args.videoId);
+        if (data.playability_status?.status === "OK") {
+          const captionTracks = data.captions?.caption_tracks || [];
+          const captionLanguages: CaptionLanguage[] = captionTracks
+            .filter((captionTrack: any) => !captionTrack.vss_id.startsWith("a"))
+            .map((captionTrack: any) => ({
+              code: captionTrack.language_code,
+              name: captionTrack.name.text ?? "",
+            }));
 
-            const captionTracks = data.captions?.caption_tracks || [];
-            const captionLanguages: CaptionLanguage[] = captionTracks
-              .filter(
-                (captionTrack: any) => !captionTrack.vss_id.startsWith("a"),
-              )
-              .map((captionTrack: any) => ({
-                code: captionTrack.language_code,
-                name: captionTrack.name.text ?? "",
-              }));
+          const loudnessDb =
+            data.player_config?.audio_config?.loudness_db || 0.0;
 
-            const loudnessDb =
-              data.player_config?.audio_config?.loudness_db || 0.0;
+          return {
+            __typename: "YoutubeVideoInfo",
+            author: data.basic_info.author,
+            captionLanguages,
+            channelId: data.basic_info.channel_id,
+            keywords: data.basic_info.keywords,
+            lengthSeconds: data.basic_info.duration,
+            description: data.basic_info.short_description,
+            title: data.basic_info.title,
+            viewCount: data.basic_info.view_count,
+            gainValue: 10 ** ((-1 * loudnessDb) / 20),
+          };
+        }
 
-            return {
-              __typename: "YoutubeVideoInfo",
-              author: data.basic_info.author,
-              captionLanguages,
-              channelId: data.basic_info.channel_id,
-              keywords: data.basic_info.keywords,
-              lengthSeconds: data.basic_info.duration,
-              description: data.basic_info.short_description,
-              title: data.basic_info.title,
-              viewCount: data.basic_info.view_count,
-              gainValue: 10 ** ((-1 * loudnessDb) / 20),
-            };
-          })
-      );
+        youtubeJsReason = data.playability_status?.reason ?? "Unknown";
+        debugError(
+          "youtube",
+          `YouTube.js could not resolve ${args.videoId}; trying yt-dlp`,
+          youtubeJsReason,
+        );
+      } catch (error) {
+        youtubeJsReason =
+          error instanceof Error ? error.message : "Unknown YouTube error";
+        debugError(
+          "youtube",
+          `YouTube.js failed for ${args.videoId}; trying yt-dlp`,
+          error,
+        );
+      }
+
+      try {
+        const metadata = await getYoutubeMetadataWithYtDlp(args.videoId);
+        return {
+          __typename: "YoutubeVideoInfo",
+          ...metadata,
+        };
+      } catch (error) {
+        debugError(
+          "youtube",
+          `yt-dlp metadata fallback failed for ${args.videoId}`,
+          error,
+        );
+        return {
+          __typename: "YoutubeVideoInfoError",
+          reason: youtubeJsReason,
+        };
+      }
     },
     nicoVideoInfo: async (
       _: any,

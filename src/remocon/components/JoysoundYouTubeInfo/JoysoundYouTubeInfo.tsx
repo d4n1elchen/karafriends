@@ -43,8 +43,7 @@ const JoysoundYouTubeInfo = ({ videoId, setYoutubeVideoId }: Props) => {
   > | null> = useRef(null);
   const videoData = useLazyLoadQuery<JoysoundYouTubeInfoVideoInfoQuery>(
     joysoundYouTubeInfoVideoInfoQuery,
-    { videoId },
-    { fetchPolicy: "network-only" },
+    { videoId }
   );
 
   useEffect(() => {

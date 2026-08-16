@@ -1,5 +1,10 @@
 import { invariant } from "ts-invariant";
-import { reportClientError, reportClientRecovered } from "./clientError";
+import {
+  isAuthorizationRequired,
+  reportAuthorizationRequired,
+  reportClientError,
+  reportClientRecovered,
+} from "./clientError";
 import { getRemoteAccessToken, getRoomId } from "./roomId";
 
 import { createClient } from "graphql-ws";
@@ -47,6 +52,7 @@ async function fetchQuery(request: RequestParameters, variables: Variables) {
 
     const responseText = await response.text();
     if (!response.ok) {
+      if (response.status === 401) reportAuthorizationRequired();
       throw new Error(`Karaoke server returned HTTP ${response.status}.`);
     }
 
@@ -101,14 +107,21 @@ const subscriptionClient = createClient({
     roomId: getRoomId(),
     remoteToken: getRemoteAccessToken(),
   }),
-  shouldRetry: () => true,
+  shouldRetry: () => !isAuthorizationRequired(),
   on: {
     connected: () => reportClientRecovered(),
     error: (error) => reportClientError(error),
     closed: (event) => {
       const closeEvent = event as { code?: number; reason?: string };
-      if (closeEvent.code !== 1000)
+      if (
+        closeEvent.code === 4401 ||
+        closeEvent.code === 4403 ||
+        /unauthorized|forbidden/i.test(closeEvent.reason || "")
+      ) {
+        reportAuthorizationRequired();
+      } else if (closeEvent.code !== 1000) {
         reportClientError(closeEvent.reason || "WebSocket closed");
+      }
     },
   },
 });

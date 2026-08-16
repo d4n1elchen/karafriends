@@ -18,3 +18,20 @@
   color: inherit;
   background: transparent;
 }
+
+.expired {
+  box-sizing: border-box;
+  display: grid;
+  min-height: 100vh;
+  place-content: center;
+  gap: 1rem;
+  padding: 2rem;
+  background: #f4f8fb;
+  color: #183242;
+  text-align: center;
+}
+
+.expired h1,
+.expired p {
+  margin: 0;
+}

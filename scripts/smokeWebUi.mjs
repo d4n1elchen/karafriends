@@ -203,32 +203,20 @@ try {
   // Use a separate browser context so the admin cookie from the player login
   // cannot accidentally authorize these deliberately broken remote requests.
   const unauthenticatedContext = await browser.createBrowserContext();
-  const disconnectedRemote = await unauthenticatedContext.newPage();
-  await disconnectedRemote.evaluateOnNewDocument(() => {
+  const expiredRemote = await unauthenticatedContext.newPage();
+  await expiredRemote.evaluateOnNewDocument(() => {
     localStorage.setItem("nickname", "Smoke Guest");
   });
-  monitorTelemetry(disconnectedRemote);
-  await disconnectedRemote.setRequestInterception(true);
-  disconnectedRemote.on("request", (request) => {
-    if (request.url().endsWith("/graphql") && request.method() === "POST") {
-      void request.respond({
-        status: 503,
-        contentType: "text/html",
-        body: "Temporarily unavailable",
-      });
-    } else {
-      void request.continue();
-    }
-  });
-  await disconnectedRemote.goto(invalidRemoteUrl.toString(), {
+  monitorTelemetry(expiredRemote);
+  await expiredRemote.goto(invalidRemoteUrl.toString(), {
     waitUntil: "domcontentloaded",
   });
-  await disconnectedRemote.waitForSelector("header");
-  await disconnectedRemote.waitForSelector('[role="status"]');
-  assert.ok(
-    await disconnectedRemote.$("header"),
-    "remote UI was replaced after a network error",
+  await expiredRemote.waitForSelector('main[role="alert"]');
+  assert.equal(
+    await expiredRemote.$eval("h1", (heading) => heading.textContent.trim()),
+    "Remote link expired",
   );
+  assert.equal(await expiredRemote.$("header"), null);
 
   const failedPage = await unauthenticatedContext.newPage();
   await failedPage.evaluateOnNewDocument(() => {
@@ -247,7 +235,7 @@ try {
       void request.continue();
     }
   });
-  await failedPage.goto(`${invalidRemoteUrl.toString()}#/song/smoke-song`, {
+  await failedPage.goto(`${remoteUrl}#/song/smoke-song`, {
     waitUntil: "domcontentloaded",
   });
   await failedPage.waitForSelector('main[role="alert"]');

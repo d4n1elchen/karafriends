@@ -32,10 +32,11 @@ const root = createRoot(container!);
 root.render(
   <React.StrictMode>
     <RemoteErrorBoundary>
-      <ConnectionBanner />
-      <RelayEnvironmentProvider environment={environment}>
-        <App />
-      </RelayEnvironmentProvider>
+      <ConnectionBanner>
+        <RelayEnvironmentProvider environment={environment}>
+          <App />
+        </RelayEnvironmentProvider>
+      </ConnectionBanner>
     </RemoteErrorBoundary>
   </React.StrictMode>,
 );

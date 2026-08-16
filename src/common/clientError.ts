@@ -2,6 +2,7 @@ export const CLIENT_ERROR_EVENT = "karafriends:client-error";
 export const CLIENT_RECOVERED_EVENT = "karafriends:client-recovered";
 
 let currentClientError: string | null = null;
+let authorizationRequired = false;
 const statusListeners = new Set<() => void>();
 
 function notifyStatusListeners(): void {
@@ -10,6 +11,10 @@ function notifyStatusListeners(): void {
 
 export function getClientError(): string | null {
   return currentClientError;
+}
+
+export function isAuthorizationRequired(): boolean {
+  return authorizationRequired;
 }
 
 export function subscribeClientStatus(listener: () => void): () => void {
@@ -46,7 +51,14 @@ export function reportClientError(reason: unknown): void {
   );
 }
 
+export function reportAuthorizationRequired(): void {
+  authorizationRequired = true;
+  currentClientError = "This remote link has expired.";
+  notifyStatusListeners();
+}
+
 export function reportClientRecovered(): void {
+  if (authorizationRequired) return;
   currentClientError = null;
   notifyStatusListeners();
   if (typeof window === "undefined") return;

@@ -1,6 +1,7 @@
 import { normalizeRoomId } from "./roomIdCore";
 
 const ROOM_STORAGE_KEY = "karafriends.roomId";
+const REMOTE_TOKEN_STORAGE_KEY = "karafriends.remoteToken";
 
 export function getRoomId(): string {
   const queryRoom = new URLSearchParams(window.location.search).get("room");
@@ -14,4 +15,18 @@ export function roomUrl(pathname: string): string {
   const url = new URL(pathname, window.location.origin);
   url.searchParams.set("room", getRoomId());
   return url.toString();
+}
+
+export function getRemoteAccessToken(): string | null {
+  const url = new URL(window.location.href);
+  const queryToken = url.searchParams.get("remoteToken");
+
+  if (queryToken) {
+    sessionStorage.setItem(REMOTE_TOKEN_STORAGE_KEY, queryToken);
+    url.searchParams.delete("remoteToken");
+    history.replaceState(history.state, "", url.toString());
+    return queryToken;
+  }
+
+  return sessionStorage.getItem(REMOTE_TOKEN_STORAGE_KEY);
 }

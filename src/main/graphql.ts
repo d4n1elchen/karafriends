@@ -1,5 +1,5 @@
 import fs from "fs";
-import { createServer } from "http";
+import { createServer, IncomingMessage } from "http";
 import path from "path";
 import { WebSocketServer } from "ws";
 
@@ -1357,6 +1357,10 @@ export interface GraphQLServerOptions {
   host?: string;
   port?: number;
   onFatalError?: (title: string, error: Error) => void;
+  authorizeWebSocket?: (
+    request: IncomingMessage,
+    connectionParams: Readonly<Record<string, unknown>> | undefined,
+  ) => boolean;
 }
 
 export function applyGraphQLMiddleware(
@@ -1395,6 +1399,9 @@ export function applyGraphQLMiddleware(
   const serverCleanup = useServer(
     {
       schema,
+      onConnect: (ctx) =>
+        options.authorizeWebSocket?.(ctx.extra.request, ctx.connectionParams) ??
+        true,
       context: (ctx) => ({
         dataSources: undefined as unknown as IGraphQLContext["dataSources"],
         room: getRoom(ctx.connectionParams?.roomId),

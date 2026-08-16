@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -25,6 +26,8 @@ export interface KarafriendsConfig {
   adminNicks: string[];
   // List of admins by deviceId
   adminDeviceIds: string[];
+  // Password used to open the standalone web player and administration pages
+  adminPassword: string;
   // Whether to enable supervised mode
   supervisedMode: boolean;
   // Whether to use a HTTP proxy (for outgoing connections)
@@ -50,6 +53,7 @@ const DEFAULT_CONFIG: KarafriendsConfig = {
   joysoundPassword: "YOUR_PASSWORD_HERE",
   adminNicks: [],
   adminDeviceIds: [],
+  adminPassword: "",
   supervisedMode: false,
   proxyEnable: false,
   proxyHost: "PROXY_HOST_HERE",
@@ -63,6 +67,8 @@ function applyEnvironmentOverrides(config: KarafriendsConfig) {
     config.devPort = parseInt(process.env.KARAFRIENDS_DEV_PORT, 10);
   if (process.env.KARAFRIENDS_REMOCON_PORT)
     config.remoconPort = parseInt(process.env.KARAFRIENDS_REMOCON_PORT, 10);
+  if (process.env.KARAFRIENDS_ADMIN_PASSWORD)
+    config.adminPassword = process.env.KARAFRIENDS_ADMIN_PASSWORD;
   return config;
 }
 
@@ -89,6 +95,8 @@ export function getConfigDirectory(): string {
 
 function getConfig(): KarafriendsConfig {
   let config = { ...DEFAULT_CONFIG };
+  let generatedAdminPassword = false;
+  let configParseFailed = false;
 
   const configFilepath: string = path.join(getConfigDirectory(), "config.yaml");
 
@@ -111,19 +119,37 @@ function getConfig(): KarafriendsConfig {
           "Fix the YAML and relaunch to restore your settings:",
         err,
       );
-      return applyEnvironmentOverrides({ ...DEFAULT_CONFIG });
+      config = { ...DEFAULT_CONFIG };
+      configParseFailed = true;
     }
   } else {
     console.log("No local configs found. Using default.");
   }
 
+  if (!config.adminPassword && !process.env.KARAFRIENDS_ADMIN_PASSWORD) {
+    config.adminPassword = randomBytes(18).toString("base64url");
+    generatedAdminPassword = true;
+  }
+
   // write back defaults (persists any newly-added config fields); best-effort
   // so an unwritable userData directory doesn't crash startup.
-  try {
-    fs.mkdirSync(path.dirname(configFilepath), { recursive: true });
-    fs.writeFileSync(configFilepath, stringify(config));
-  } catch (err) {
-    console.error(`Failed to write config to ${configFilepath}:`, err);
+  if (!configParseFailed) {
+    try {
+      fs.mkdirSync(path.dirname(configFilepath), { recursive: true });
+      fs.writeFileSync(configFilepath, stringify(config));
+      if (generatedAdminPassword) {
+        console.log(
+          `Generated web admin password: ${config.adminPassword} (saved in ${configFilepath})`,
+        );
+      }
+    } catch (err) {
+      console.error(`Failed to write config to ${configFilepath}:`, err);
+    }
+  } else if (generatedAdminPassword) {
+    console.log(
+      `Generated temporary web admin password: ${config.adminPassword} ` +
+        "(fix config.yaml to make it persistent)",
+    );
   }
 
   return applyEnvironmentOverrides(config);

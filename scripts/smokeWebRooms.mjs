@@ -3,9 +3,39 @@ import { createClient } from "graphql-ws";
 import WebSocket from "ws";
 
 const baseUrl = process.env.KARAFRIENDS_SMOKE_URL ?? "http://127.0.0.1:8183";
+const adminPassword = process.env.KARAFRIENDS_ADMIN_PASSWORD;
+assert.ok(adminPassword, "Set KARAFRIENDS_ADMIN_PASSWORD for the smoke server");
 const graphqlUrl = new URL("/graphql", baseUrl);
 const websocketUrl = new URL(graphqlUrl);
 websocketUrl.protocol = websocketUrl.protocol === "https:" ? "wss:" : "ws:";
+
+const unauthenticatedGraphql = await fetch(graphqlUrl, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ query: "query { playbackState }" }),
+});
+assert.equal(unauthenticatedGraphql.status, 401);
+
+const loginResponse = await fetch(new URL("/login", baseUrl), {
+  method: "POST",
+  headers: { "content-type": "application/x-www-form-urlencoded" },
+  body: new URLSearchParams({ password: adminPassword, next: "/" }),
+  redirect: "manual",
+});
+assert.equal(loginResponse.status, 303);
+const adminCookie = loginResponse.headers.get("set-cookie")?.split(";", 1)[0];
+assert.ok(adminCookie, "admin login did not set a session cookie");
+
+const remoteAccessResponse = await fetch(
+  new URL("/api/remote-access?room=main", baseUrl),
+  { headers: { cookie: adminCookie } },
+);
+assert.equal(remoteAccessResponse.status, 200);
+const remoteAccess = await remoteAccessResponse.json();
+const remoteToken = new URL(remoteAccess.remoteUrl).searchParams.get(
+  "remoteToken",
+);
+assert.match(remoteToken, /^[A-Za-z0-9_-]{40,}$/);
 
 async function graphql(roomId, query) {
   const response = await fetch(graphqlUrl, {
@@ -13,6 +43,7 @@ async function graphql(roomId, query) {
     headers: {
       "content-type": "application/json",
       "x-karafriends-room": roomId,
+      "x-karafriends-remote-token": remoteToken,
     },
     body: JSON.stringify({ query }),
   });
@@ -25,6 +56,7 @@ async function graphql(roomId, query) {
 
 const roomResponse = await fetch(new URL("/api/rooms", baseUrl), {
   method: "POST",
+  headers: { cookie: adminCookie },
 });
 assert.equal(roomResponse.status, 201);
 const createdRoom = await roomResponse.json();
@@ -36,6 +68,10 @@ assert.equal(
 assert.equal(
   new URL(createdRoom.remoteUrl).searchParams.get("room"),
   createdRoom.roomId,
+);
+assert.equal(
+  new URL(createdRoom.remoteUrl).searchParams.get("remoteToken"),
+  remoteToken,
 );
 
 const roomA = `smoke-a-${Date.now()}`;
@@ -56,7 +92,7 @@ const eventReceived = new Promise((resolve, reject) => {
 const client = createClient({
   url: websocketUrl.toString(),
   webSocketImpl: WebSocket,
-  connectionParams: { roomId: roomA },
+  connectionParams: { roomId: roomA, remoteToken },
 });
 const disposeSubscription = client.subscribe(
   { query: "subscription { playbackStateChanged }" },

@@ -58,6 +58,7 @@ scan the player QR code. The following environment variables are supported:
 - `KARAFRIENDS_HOST`: bind address (default `0.0.0.0`)
 - `KARAFRIENDS_PUBLIC_URL`: externally visible base URL used in room links
 - `KARAFRIENDS_TRUST_PROXY`: set to `1` behind one trusted reverse proxy
+- `KARAFRIENDS_ADMIN_PASSWORD`: overrides the generated web admin password
 - `KARAFRIENDS_DATA_DIR`: runtime data root (default: `./data`)
 - `KARAFRIENDS_CONFIG_DIR`: configuration directory (default: `./data/config`)
 - `KARAFRIENDS_MEDIA_DIR`: media and queue directory (default: `./data/media`)
@@ -70,6 +71,15 @@ Add service credentials there before using the corresponding DAM or Joysound
 features. The entire `data` directory is ignored by Git. Set
 `KARAFRIENDS_DATA_DIR` to move all writable runtime data to a persistent volume,
 or use the individual directory overrides when needed.
+
+The first launch also generates `adminPassword` in `config.yaml`. Enter it on
+the login screen to open the launcher, player, media, and administration APIs.
+The phone remote itself does not require that password: player QR codes include
+a random remote-access token generated for the current server process. That
+token authorizes remote HTTP and WebSocket requests and expires whenever the
+server restarts, so already-open remotes must scan the new QR code after a
+restart. Set `KARAFRIENDS_ADMIN_PASSWORD` to manage the password outside the
+configuration file.
 
 For an internet deployment, terminate HTTPS at a reverse proxy, set
 `KARAFRIENDS_PUBLIC_URL` to the public `https://` origin, and persist the config,

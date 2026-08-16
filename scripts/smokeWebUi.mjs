@@ -5,6 +5,7 @@ import process from "node:process";
 import puppeteer from "puppeteer-core";
 
 const baseUrl = process.env.KARAFRIENDS_SMOKE_URL ?? "http://127.0.0.1:8080";
+const adminPassword = process.env.KARAFRIENDS_ADMIN_PASSWORD;
 const browserCandidates = [
   process.env.CHROME_PATH,
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
@@ -40,6 +41,17 @@ try {
   page.on("pageerror", (error) => pageErrors.push(error));
 
   await page.goto(baseUrl, { waitUntil: "networkidle0" });
+  if (new URL(page.url()).pathname === "/login") {
+    assert.ok(
+      adminPassword,
+      "Set KARAFRIENDS_ADMIN_PASSWORD when testing an authenticated server",
+    );
+    await page.type('input[name="password"]', adminPassword);
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: "networkidle0" }),
+      page.click('form[action="/login"] button[type="submit"]'),
+    ]);
+  }
   assert.match(await page.title(), /Karafriends/);
   await page.waitForSelector('form[action="/rooms"] button');
   await Promise.all([
@@ -50,6 +62,17 @@ try {
   const playerUrl = new URL(page.url());
   const roomId = playerUrl.searchParams.get("room");
   assert.match(roomId, /^[a-f0-9]{32}$/);
+  const remoteUrl = await page.evaluate(async (room) => {
+    const response = await fetch(
+      `/api/remote-access?room=${encodeURIComponent(room)}`,
+    );
+    if (!response.ok) throw new Error(`Remote URL failed: ${response.status}`);
+    return (await response.json()).remoteUrl;
+  }, roomId);
+  assert.match(
+    new URL(remoteUrl).searchParams.get("remoteToken"),
+    /^[A-Za-z0-9_-]{40,}$/,
+  );
   await page.waitForSelector("button.btn-large");
   const startLabel = await page.$eval("button.btn-large", (button) =>
     button.textContent.trim(),
@@ -123,9 +146,7 @@ try {
   const remote = await browser.newPage();
   monitorTelemetry(remote);
   remote.on("pageerror", (error) => pageErrors.push(error));
-  await remote.goto(`${baseUrl}/remocon/?room=${encodeURIComponent(roomId)}`, {
-    waitUntil: "networkidle0",
-  });
+  await remote.goto(remoteUrl, { waitUntil: "networkidle0" });
   await remote.waitForSelector('input[name="nickname"]');
   await remote.type('input[name="nickname"]', "Smoke Guest");
   await Promise.all([
@@ -144,6 +165,9 @@ try {
     remote.waitForSelector("header"),
   ]);
 
+  const invalidRemoteUrl = new URL(remoteUrl);
+  invalidRemoteUrl.searchParams.set("remoteToken", "invalid-smoke-token");
+
   const disconnectedRemote = await browser.newPage();
   monitorTelemetry(disconnectedRemote);
   await disconnectedRemote.setRequestInterception(true);
@@ -158,10 +182,9 @@ try {
       void request.continue();
     }
   });
-  await disconnectedRemote.goto(
-    `${baseUrl}/remocon/?room=${encodeURIComponent(roomId)}`,
-    { waitUntil: "domcontentloaded" },
-  );
+  await disconnectedRemote.goto(invalidRemoteUrl.toString(), {
+    waitUntil: "domcontentloaded",
+  });
   await disconnectedRemote.waitForSelector("header");
   await disconnectedRemote.waitForSelector('[role="status"]');
   assert.ok(
@@ -183,10 +206,9 @@ try {
       void request.continue();
     }
   });
-  await failedPage.goto(
-    `${baseUrl}/remocon/?room=${encodeURIComponent(roomId)}#/song/smoke-song`,
-    { waitUntil: "domcontentloaded" },
-  );
+  await failedPage.goto(`${invalidRemoteUrl.toString()}#/song/smoke-song`, {
+    waitUntil: "domcontentloaded",
+  });
   await failedPage.waitForSelector('main[role="alert"]');
   const retryLabel = await failedPage.$eval(
     'main[role="alert"] button',

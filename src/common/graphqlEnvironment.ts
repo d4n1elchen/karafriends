@@ -1,6 +1,6 @@
 import { invariant } from "ts-invariant";
 import { reportClientError, reportClientRecovered } from "./clientError";
-import { getRoomId } from "./roomId";
+import { getRemoteAccessToken, getRoomId } from "./roomId";
 
 import { createClient } from "graphql-ws";
 import {
@@ -23,6 +23,7 @@ async function fetchQuery(request: RequestParameters, variables: Variables) {
   );
 
   try {
+    const remoteToken = getRemoteAccessToken();
     const response = await fetch(
       window.karafriends?.isDesktop
         ? `http://localhost:${
@@ -34,6 +35,7 @@ async function fetchQuery(request: RequestParameters, variables: Variables) {
         headers: {
           "Content-Type": "application/json",
           "X-Karafriends-Room": getRoomId(),
+          ...(remoteToken ? { "X-Karafriends-Remote-Token": remoteToken } : {}),
         },
         body: JSON.stringify({
           query: request.text,
@@ -95,7 +97,10 @@ function getSubscriptionUrl(): string {
 
 const subscriptionClient = createClient({
   url: getSubscriptionUrl(),
-  connectionParams: () => ({ roomId: getRoomId() }),
+  connectionParams: () => ({
+    roomId: getRoomId(),
+    remoteToken: getRemoteAccessToken(),
+  }),
   shouldRetry: () => true,
   on: {
     connected: () => reportClientRecovered(),

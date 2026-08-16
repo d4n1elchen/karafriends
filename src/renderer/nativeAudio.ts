@@ -8,6 +8,10 @@ export interface InputDeviceOption {
   channelCount: number;
 }
 
+type LowLatencyMediaTrackConstraints = MediaTrackConstraints & {
+  latency?: number | { ideal?: number };
+};
+
 const registry = new FinalizationRegistry<number>((deviceId) => {
   window.karafriends.nativeAudio.inputDevice_delete(deviceId);
 });
@@ -24,7 +28,6 @@ export class InputDevice {
   private splitter: ChannelSplitterNode | null = null;
   private analyser: AnalyserNode | null = null;
   private monitorGain: GainNode | null = null;
-  private monitorCompressor: DynamicsCompressorNode | null = null;
   private samples: Float32Array<ArrayBuffer> | null = null;
 
   private constructor(option: InputDeviceOption, channelSelection: number) {
@@ -115,7 +118,7 @@ export class InputDevice {
   static prepareBrowserAudio(): AudioContext | undefined {
     if (window.karafriends.isDesktop) return undefined;
 
-    const audioContext = new AudioContext({ latencyHint: "interactive" });
+    const audioContext = new AudioContext({ latencyHint: 0.01 });
     // This must happen synchronously inside the click handler. Waiting for a
     // permission prompt first can consume the browser's user activation and
     // leave the monitoring context suspended on a new HTTPS origin.
@@ -129,18 +132,20 @@ export class InputDevice {
     browserDeviceId: string,
     preparedAudioContext?: AudioContext,
   ): Promise<void> {
+    const audioConstraints: LowLatencyMediaTrackConstraints = {
+      autoGainControl: false,
+      channelCount: { ideal: this.channelSelection + 1 },
+      deviceId: browserDeviceId ? { exact: browserDeviceId } : undefined,
+      echoCancellation: false,
+      latency: { ideal: 0 },
+      noiseSuppression: false,
+    };
     this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        autoGainControl: false,
-        channelCount: { ideal: this.channelSelection + 1 },
-        deviceId: browserDeviceId ? { exact: browserDeviceId } : undefined,
-        echoCancellation: false,
-        noiseSuppression: false,
-      },
+      audio: audioConstraints,
       video: false,
     });
     this.audioContext =
-      preparedAudioContext || new AudioContext({ latencyHint: "interactive" });
+      preparedAudioContext || new AudioContext({ latencyHint: 0.01 });
     await this.audioContext.resume();
     if (this.audioContext.state !== "running") {
       throw new Error(
@@ -156,18 +161,11 @@ export class InputDevice {
     this.analyser.smoothingTimeConstant = 0;
     this.monitorGain = this.audioContext.createGain();
     this.monitorGain.gain.value = 1;
-    this.monitorCompressor = this.audioContext.createDynamicsCompressor();
-    this.monitorCompressor.threshold.value = -12;
-    this.monitorCompressor.knee.value = 12;
-    this.monitorCompressor.ratio.value = 4;
-    this.monitorCompressor.attack.value = 0.003;
-    this.monitorCompressor.release.value = 0.25;
     this.samples = new Float32Array(this.analyser.fftSize);
     this.source.connect(this.splitter);
     this.splitter.connect(this.analyser, this.channelSelection);
     this.splitter.connect(this.monitorGain, this.channelSelection, 0);
-    this.monitorGain.connect(this.monitorCompressor);
-    this.monitorCompressor.connect(this.audioContext.destination);
+    this.monitorGain.connect(this.audioContext.destination);
   }
 
   getPitch(): PitchSample {
@@ -193,7 +191,6 @@ export class InputDevice {
     this.splitter?.disconnect();
     this.analyser?.disconnect();
     this.monitorGain?.disconnect();
-    this.monitorCompressor?.disconnect();
     this.stream?.getTracks().forEach((track) => track.stop());
     void this.audioContext?.close();
     this.stream = null;
@@ -202,7 +199,6 @@ export class InputDevice {
     this.splitter = null;
     this.analyser = null;
     this.monitorGain = null;
-    this.monitorCompressor = null;
     this.samples = null;
   }
 }

@@ -10,17 +10,13 @@ import {
 
 export const YOUTUBE_COOKIES_FILENAME = "youtube-cookies.txt";
 
-export function getYoutubeCookiesFile(): string | null {
-  return resolveYoutubeCookiesFile(
+export function getYoutubeYtDlpArgs(): string[] {
+  const cookieFile = resolveYoutubeCookiesFile(
     process.env.KARAFRIENDS_YOUTUBE_COOKIES_FILE,
     path.join(getConfigDirectory(), YOUTUBE_COOKIES_FILENAME),
     process.cwd(),
     fs.existsSync,
   );
-}
-
-export function getYoutubeYtDlpArgs(): string[] {
-  const cookieFile = getYoutubeCookiesFile();
 
   // The standalone web server is already running under a supported Node
   // executable. Explicitly give it to yt-dlp so current YouTube JavaScript

@@ -71,7 +71,7 @@ export function resourcePathsFor(
       ? "yt-dlp.exe"
       : platform === "darwin"
         ? "yt-dlp_macos"
-        : "yt-dlp";
+        : "yt-dlp_linux";
   return {
     ffmpeg: path.join(cacheDir, "ffmpeg", ffmpegName),
     ytdlp: path.join(cacheDir, "ytdlp", ytdlpName),
@@ -129,7 +129,10 @@ export function assetPlans(
       return [
         {
           id: "ytdlp",
-          url: YTDLP_BASE,
+          // Use the self-contained Linux executable. The generic `yt-dlp`
+          // asset is a Python zipapp and fails under services whose system
+          // Python is older than yt-dlp's current minimum version.
+          url: `${YTDLP_BASE}_linux`,
           dest: paths.ytdlp,
           download: { kind: "binary" },
         },

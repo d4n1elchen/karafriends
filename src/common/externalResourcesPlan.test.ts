@@ -59,9 +59,9 @@ const EXPECT: Record<
   linux: {
     extractor: "7za",
     ffmpeg: "ffmpeg",
-    ytdlp: "yt-dlp",
+    ytdlp: "yt-dlp_linux",
     ytdlpUrl:
-      "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp",
+      "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux",
     ffmpegUrl:
       "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz",
     archiveName: "ffmpeg.tar.xz",

@@ -142,6 +142,11 @@ export class InputDevice {
     this.audioContext =
       preparedAudioContext || new AudioContext({ latencyHint: "interactive" });
     await this.audioContext.resume();
+    if (this.audioContext.state !== "running") {
+      throw new Error(
+        "The browser blocked microphone playback. Tap Enable microphone again.",
+      );
+    }
     this.source = this.audioContext.createMediaStreamSource(this.stream);
     this.splitter = this.audioContext.createChannelSplitter(
       Math.max(this.channelSelection + 1, 1),

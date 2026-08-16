@@ -31,6 +31,18 @@ export default function MicrophoneSetting({ mic, onChange }: Props) {
   const [devices, setDevices] = useState<InputDeviceOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const selectableDevices =
+    devices.length > 0
+      ? devices
+      : mic
+        ? [
+            {
+              id: String(mic.deviceId),
+              name: mic.name,
+              channelCount: Math.max(mic.channelSelection + 1, 1),
+            },
+          ]
+        : [];
 
   const refreshDevices = async (requestPermission: boolean) => {
     setLoading(true);
@@ -77,7 +89,11 @@ export default function MicrophoneSetting({ mic, onChange }: Props) {
     }
   };
 
-  if (!window.karafriends.isDesktop && devices.length === 0) {
+  if (
+    !window.karafriends.isDesktop &&
+    selectableDevices.length === 0 &&
+    mic === null
+  ) {
     return (
       <div>
         <button
@@ -106,7 +122,7 @@ export default function MicrophoneSetting({ mic, onChange }: Props) {
         value={mic ? `${mic.deviceId}_${mic.channelSelection}` : ""}
         onChange={(e) => {
           const dataset = e.target.options[e.target.selectedIndex].dataset;
-          const option = devices.find(
+          const option = selectableDevices.find(
             (candidate) => candidate.id === dataset.deviceId,
           );
           if (!option) return;
@@ -128,7 +144,7 @@ export default function MicrophoneSetting({ mic, onChange }: Props) {
         <option value="" disabled={true}>
           Select a microphone
         </option>
-        {devices.map(({ id, name, channelCount }) =>
+        {selectableDevices.map(({ id, name, channelCount }) =>
           [...Array(channelCount)].map((_, i) => (
             <MicrophoneSettingOption
               key={`${name}_${i}`}

@@ -175,6 +175,22 @@ try {
   );
   await noAudioWorkletPage.close();
 
+  const emptyRoomPage = await browser.newPage();
+  const emptyRoomUrl = new URL(remoteUrl);
+  emptyRoomUrl.searchParams.set("room", "");
+  await emptyRoomPage.evaluateOnNewDocument((storedRoomId) => {
+    localStorage.setItem("karafriends.roomId", storedRoomId);
+  }, roomId);
+  await emptyRoomPage.goto(emptyRoomUrl.toString(), {
+    waitUntil: "networkidle0",
+  });
+  assert.equal(
+    new URL(emptyRoomPage.url()).searchParams.get("room"),
+    roomId,
+    "an empty room parameter should be populated with the resolved room",
+  );
+  await emptyRoomPage.close();
+
   const remote = await browser.newPage();
   monitorTelemetry(remote);
   remote.on("pageerror", (error) => pageErrors.push(error));

@@ -4,10 +4,17 @@ const ROOM_STORAGE_KEY = "karafriends.roomId";
 const REMOTE_TOKEN_STORAGE_KEY = "karafriends.remoteToken";
 
 export function getRoomId(): string {
-  const queryRoom = new URLSearchParams(window.location.search).get("room");
+  const url = new URL(window.location.href);
+  const queryRoom = url.searchParams.get("room");
   const storedRoom = localStorage.getItem(ROOM_STORAGE_KEY);
   const roomId = normalizeRoomId(queryRoom || storedRoom);
   localStorage.setItem(ROOM_STORAGE_KEY, roomId);
+
+  if (queryRoom !== roomId) {
+    url.searchParams.set("room", roomId);
+    history.replaceState(history.state, "", url.toString());
+  }
+
   return roomId;
 }
 

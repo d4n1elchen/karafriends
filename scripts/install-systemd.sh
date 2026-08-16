@@ -159,6 +159,7 @@ KARAFRIENDS_REMOCON_PORT=8080
 # KARAFRIENDS_ADMIN_PASSWORD=replace-with-a-long-password
 # KARAFRIENDS_PUBLIC_URL=https://karaoke.example.com
 # KARAFRIENDS_TRUST_PROXY=1
+# KARAFRIENDS_YOUTUBE_COOKIES_FILE=$DATA_DIR/config/youtube-cookies.txt
 EOF
   chown root:"$SERVICE_GROUP" "$ENV_PATH"
   chmod 0640 "$ENV_PATH"

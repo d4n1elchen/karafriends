@@ -20,6 +20,7 @@ import {
   getJoysoundTelopDuration,
 } from "./joysoundMediaMetadata";
 import { getWebDataDirectory, isElectronRuntime } from "./runtimePaths";
+import { getYoutubeYtDlpAuthArgs } from "./youtubeYtDlpArgs";
 
 export const TEMP_FOLDER: string =
   process.env.KARAFRIENDS_MEDIA_DIR ||
@@ -390,6 +391,7 @@ function downloadJoysoundYoutubeVideoPromise(
     const ytdlp = spawn(
       resourcePaths.ytdlp,
       [
+        ...getYoutubeYtDlpAuthArgs(),
         "-S",
         "res:720,ext:mp4",
         "-f",
@@ -1087,6 +1089,7 @@ function downloadYoutubeVideoImpl(
     const ytdlp = spawn(
       resourcePaths.ytdlp,
       [
+        ...getYoutubeYtDlpAuthArgs(),
         ...captionArgs,
         ...formatArgs,
         "--recode",

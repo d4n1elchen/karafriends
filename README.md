@@ -65,6 +65,8 @@ scan the player QR code. The following environment variables are supported:
 - `KARAFRIENDS_RESOURCE_DIR`: runtime tools directory (default: `./data/resources`)
 - `KARAFRIENDS_EXTRA_RESOURCES_DIR`: directory containing `7za`/`7za.exe`
 - `KARAFRIENDS_WEB_ROOT`: built client asset directory (default `build/web`)
+- `KARAFRIENDS_YOUTUBE_COOKIES_FILE`: Netscape-format YouTube cookies file
+  passed to `yt-dlp` (default: `./data/config/youtube-cookies.txt` when present)
 
 The first web launch creates `data/config/config.yaml` under the project root.
 Add service credentials there before using the corresponding DAM or Joysound

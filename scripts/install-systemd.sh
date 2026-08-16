@@ -121,21 +121,31 @@ UNIT_PATH="/etc/systemd/system/$SERVICE_NAME.service"
 ENV_DIR="/etc/$SERVICE_NAME"
 ENV_PATH="$ENV_DIR/$SERVICE_NAME.env"
 
-# Escape values placed inside double quotes in a systemd unit.
-systemd_quote() {
+# Escape a filesystem path as an unquoted systemd directive value. Some older
+# systemd releases treat quotes literally for path-only directives such as
+# WorkingDirectory=, so use C-style escapes instead of surrounding quotes.
+systemd_path() {
   local value="$1"
+  if [[ "$value" == *$'\n'* || "$value" == *$'\r'* ]]; then
+    echo "Paths containing newlines are not supported: $value" >&2
+    exit 1
+  fi
   value="${value//\\/\\\\}"
-  value="${value//\"/\\\"}"
+  value="${value//%/%%}"
+  value="${value// /\\x20}"
+  value="${value//$'\t'/\\x09}"
+  value="${value//\"/\\x22}"
+  value="${value//\'/\\x27}"
   printf '%s' "$value"
 }
 
-PROJECT_ROOT_Q="$(systemd_quote "$PROJECT_ROOT")"
-SERVER_ENTRY_Q="$(systemd_quote "$SERVER_ENTRY")"
-PNP_LOADER_Q="$(systemd_quote "$PNP_LOADER")"
-PNP_ESM_LOADER_Q="$(systemd_quote "$PNP_ESM_LOADER")"
-DATA_DIR_Q="$(systemd_quote "$DATA_DIR")"
-NODE_BIN_Q="$(systemd_quote "$NODE_BIN")"
-ENV_PATH_Q="$(systemd_quote "$ENV_PATH")"
+PROJECT_ROOT_Q="$(systemd_path "$PROJECT_ROOT")"
+SERVER_ENTRY_Q="$(systemd_path "$SERVER_ENTRY")"
+PNP_LOADER_Q="$(systemd_path "$PNP_LOADER")"
+PNP_ESM_LOADER_Q="$(systemd_path "$PNP_ESM_LOADER")"
+DATA_DIR_Q="$(systemd_path "$DATA_DIR")"
+NODE_BIN_Q="$(systemd_path "$NODE_BIN")"
+ENV_PATH_Q="$(systemd_path "$ENV_PATH")"
 
 install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0750 "$DATA_DIR"
 install -d -o root -g "$SERVICE_GROUP" -m 0750 "$ENV_DIR"
@@ -166,11 +176,11 @@ After=network-online.target
 Type=simple
 User=$SERVICE_USER
 Group=$SERVICE_GROUP
-WorkingDirectory="$PROJECT_ROOT_Q"
+WorkingDirectory=$PROJECT_ROOT_Q
 Environment=NODE_ENV=production
-Environment="KARAFRIENDS_DATA_DIR=$DATA_DIR_Q"
-EnvironmentFile=-"$ENV_PATH_Q"
-ExecStart="$NODE_BIN_Q" --require "$PNP_LOADER_Q" --experimental-loader "$PNP_ESM_LOADER_Q" "$SERVER_ENTRY_Q"
+Environment=KARAFRIENDS_DATA_DIR=$DATA_DIR_Q
+EnvironmentFile=-$ENV_PATH_Q
+ExecStart=$NODE_BIN_Q --require $PNP_LOADER_Q --experimental-loader $PNP_ESM_LOADER_Q $SERVER_ENTRY_Q
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=20s
@@ -178,7 +188,7 @@ UMask=0027
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ReadWritePaths="$DATA_DIR_Q"
+ReadWritePaths=$DATA_DIR_Q
 
 [Install]
 WantedBy=multi-user.target

@@ -53,9 +53,11 @@ export default function MicrophoneSetting({ mic, onChange }: Props) {
   }, []);
 
   const enableBrowserMicrophone = async () => {
+    let audioContext: AudioContext | undefined;
     setLoading(true);
     setError(null);
     try {
+      audioContext = InputDevice.prepareBrowserAudio();
       const availableDevices = await InputDevice.available(true);
       setDevices(availableDevices);
       const defaultDevice =
@@ -64,8 +66,9 @@ export default function MicrophoneSetting({ mic, onChange }: Props) {
       if (!defaultDevice) {
         throw new Error("No microphone was found by this browser.");
       }
-      onChange(await InputDevice.create(defaultDevice, 0));
+      onChange(await InputDevice.create(defaultDevice, 0, audioContext));
     } catch (reason) {
+      void audioContext?.close();
       setError(
         reason instanceof Error ? reason.message : "Microphone access failed",
       );

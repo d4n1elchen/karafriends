@@ -53,16 +53,29 @@ export class InputDevice {
       );
     }
 
+    let grantedDevice: InputDeviceOption | undefined;
     if (requestPermission) {
       const permissionStream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: false,
       });
+      const grantedTrack = permissionStream.getAudioTracks()[0];
+      if (grantedTrack) {
+        const settings = grantedTrack.getSettings();
+        grantedDevice = {
+          // An empty id intentionally asks getUserMedia for the browser's
+          // already-authorized default input. Some TV/mobile browsers grant a
+          // stream but still return no entries from enumerateDevices().
+          id: "",
+          name: grantedTrack.label || "Default microphone",
+          channelCount: Math.max(settings.channelCount || 1, 1),
+        };
+      }
       permissionStream.getTracks().forEach((track) => track.stop());
     }
 
     const devices = await navigator.mediaDevices.enumerateDevices();
-    return devices
+    const inputDevices = devices
       .filter((device) => device.kind === "audioinput")
       .map((device, index) => ({
         id: device.deviceId,
@@ -72,11 +85,17 @@ export class InputDevice {
         // is the only portable pre-permission representation.
         channelCount: 1,
       }));
+    return inputDevices.length > 0
+      ? inputDevices
+      : grantedDevice
+        ? [grantedDevice]
+        : [];
   }
 
   static async create(
     option: InputDeviceOption,
     channelSelection: number,
+    preparedAudioContext?: AudioContext,
   ): Promise<InputDevice> {
     const device = new InputDevice(option, channelSelection);
     if (window.karafriends.isDesktop) {
@@ -89,11 +108,27 @@ export class InputDevice {
       return device;
     }
 
-    await device.startBrowserInput(option.id);
+    await device.startBrowserInput(option.id, preparedAudioContext);
     return device;
   }
 
-  private async startBrowserInput(browserDeviceId: string): Promise<void> {
+  static prepareBrowserAudio(): AudioContext | undefined {
+    if (window.karafriends.isDesktop) return undefined;
+
+    const audioContext = new AudioContext({ latencyHint: "interactive" });
+    // This must happen synchronously inside the click handler. Waiting for a
+    // permission prompt first can consume the browser's user activation and
+    // leave the monitoring context suspended on a new HTTPS origin.
+    void audioContext.resume().catch(() => {
+      // startBrowserInput retries and reports the error after permission.
+    });
+    return audioContext;
+  }
+
+  private async startBrowserInput(
+    browserDeviceId: string,
+    preparedAudioContext?: AudioContext,
+  ): Promise<void> {
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         autoGainControl: false,
@@ -104,7 +139,8 @@ export class InputDevice {
       },
       video: false,
     });
-    this.audioContext = new AudioContext({ latencyHint: "interactive" });
+    this.audioContext =
+      preparedAudioContext || new AudioContext({ latencyHint: "interactive" });
     await this.audioContext.resume();
     this.source = this.audioContext.createMediaStreamSource(this.stream);
     this.splitter = this.audioContext.createChannelSplitter(

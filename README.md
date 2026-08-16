@@ -80,3 +80,30 @@ The web player uses Web Audio for playback and microphone pitch detection.
 Browser microphone access requires a secure context (`https://`) except on
 `localhost`; the player asks for permission only after **Enable microphone** is
 pressed. Electron continues to use its native low-latency audio implementation.
+
+### Linux systemd service
+
+After building the web app, install it as a system service from the repository
+root:
+
+```sh
+yarn install --immutable
+yarn build-web
+sudo ./scripts/install-systemd.sh
+```
+
+The installer runs the service as the user who invoked `sudo`, enables it at
+boot, and starts it immediately. It can be run again after moving the project
+or changing the Node.js installation. Useful commands:
+
+```sh
+sudo systemctl status karafriends
+sudo systemctl restart karafriends
+journalctl -u karafriends -f
+```
+
+Edit `/etc/karafriends/karafriends.env` for the port, public URL, or reverse
+proxy settings, then restart the service. Service credentials remain in
+`data/config/config.yaml`. To install without immediately starting the server,
+pass `--no-start`; see `./scripts/install-systemd.sh --help` for user, Node.js,
+and service-name overrides.

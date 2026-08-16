@@ -67,6 +67,17 @@ const POLL_INTERVAL_MS = 5 * 1000;
 const DAM_GAIN = 1.0;
 const NON_DAM_GAIN = 0.8;
 
+function updateMediaSessionMetadata(metadata: MediaMetadataInit) {
+  if (!("mediaSession" in navigator) || typeof MediaMetadata === "undefined")
+    return;
+
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata(metadata);
+  } catch (error) {
+    console.warn("Unable to update media session metadata", error);
+  }
+}
+
 function Player(props: {
   mics: InputDevice[];
   kuroshiro: KuroshiroSingleton;
@@ -156,7 +167,7 @@ function Player(props: {
                     }
                     props.audio.gain(DAM_GAIN);
 
-                    navigator.mediaSession.metadata = new MediaMetadata({
+                    updateMediaSessionMetadata({
                       title: popSong.name,
                       artist: popSong.artistName,
                     });
@@ -178,7 +189,7 @@ function Player(props: {
 
                     props.audio.gain(DAM_GAIN);
 
-                    navigator.mediaSession.metadata = new MediaMetadata({
+                    updateMediaSessionMetadata({
                       title: popSong.name,
                       artist: popSong.artistName,
                     });
@@ -190,29 +201,78 @@ function Player(props: {
                 setShouldShowPianoRoll(false);
                 setShouldShowJoysound(true);
                 setShouldShowAdhocLyrics(false);
+                setJoysoundTelop(null);
 
                 const filenameSuffix = popSong.youtubeVideoId
                   ? popSong.youtubeVideoId
                   : "default";
 
-                videoRef.current.src = mediaUrl(
+                const joysoundVideoUrl = mediaUrl(
                   `joysound-${popSong.songId}-${filenameSuffix}.mp4`,
                 );
+                const joysoundTelopUrl = mediaUrl(
+                  `joysound-${popSong.songId}.joy_02`,
+                );
 
-                navigator.mediaSession.metadata = new MediaMetadata({
+                updateMediaSessionMetadata({
                   title: popSong.name,
                   artist: popSong.artistName,
                 });
 
-                fetch(mediaUrl(`joysound-${popSong.songId}.joy_02`))
-                  .then((resp) => resp.arrayBuffer())
-                  .then((data) => {
-                    setJoysoundTelop(data);
-                    setJoysoundIsRomaji(popSong.isRomaji);
+                const startJoysoundVideo = () => {
+                  if (!videoRef.current) return;
 
-                    invariant(videoRef.current);
-                    videoRef.current.play();
+                  videoRef.current.src = joysoundVideoUrl;
+                  // Older Android WebViews return void from play() instead of
+                  // a Promise, so normalize the result before handling errors.
+                  void Promise.resolve(videoRef.current.play()).catch(
+                    (error) => {
+                      console.error("Failed to start Joysound video", error);
+                    },
+                  );
+                };
+
+                let joysoundTelopLoaded = false;
+                const loadJoysoundTelop = (url: string) =>
+                  fetch(url)
+                    .then((resp) => {
+                      if (!resp.ok) {
+                        throw new Error(
+                          `Joysound telop request failed with HTTP ${resp.status}`,
+                        );
+                      }
+
+                      return resp.arrayBuffer();
+                    })
+                    .then((data) => {
+                      joysoundTelopLoaded = true;
+                      setJoysoundTelop(data);
+                      setJoysoundIsRomaji(popSong.isRomaji);
+                    });
+
+                // Start playback independently. Some Android WebViews can
+                // leave the first concurrent telop fetch pending, so retry it
+                // with a cache-busting query without ever blocking the video.
+                startJoysoundVideo();
+                void loadJoysoundTelop(joysoundTelopUrl).catch((error) => {
+                  console.error(
+                    `Initial Joysound subtitle request failed for ${popSong.songId}`,
+                    error,
+                  );
+                });
+                window.setTimeout(() => {
+                  if (joysoundTelopLoaded) return;
+
+                  const separator = joysoundTelopUrl.includes("?") ? "&" : "?";
+                  void loadJoysoundTelop(
+                    `${joysoundTelopUrl}${separator}retry=${Date.now()}`,
+                  ).catch((error) => {
+                    console.error(
+                      `Joysound subtitle retry failed for ${popSong.songId}`,
+                      error,
+                    );
                   });
+                }, 2_000);
 
                 break;
               case "YoutubeQueueItem":
@@ -232,7 +292,7 @@ function Player(props: {
                 );
                 props.audio.gain(popSong.gainValue);
 
-                navigator.mediaSession.metadata = new MediaMetadata({
+                updateMediaSessionMetadata({
                   title: popSong.name,
                 });
 
@@ -247,7 +307,7 @@ function Player(props: {
 
                 props.audio.gain(NON_DAM_GAIN);
 
-                navigator.mediaSession.metadata = new MediaMetadata({
+                updateMediaSessionMetadata({
                   title: popSong.name,
                 });
 

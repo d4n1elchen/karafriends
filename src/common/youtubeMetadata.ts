@@ -3,7 +3,7 @@ import { promisify } from "util";
 
 import { ensureExternalResources, getResourcePaths } from "./externalResources";
 import { parseYtDlpMetadata, YoutubeMetadata } from "./youtubeMetadataCore";
-import { getYoutubeYtDlpAuthArgs } from "./youtubeYtDlpArgs";
+import { getYoutubeYtDlpArgs } from "./youtubeYtDlpArgs";
 
 const execFileAsync = promisify(execFile);
 const YOUTUBE_VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
@@ -22,7 +22,7 @@ export async function getYoutubeMetadataWithYtDlp(
   const { stdout } = await execFileAsync(
     getResourcePaths().ytdlp,
     [
-      ...getYoutubeYtDlpAuthArgs(),
+      ...getYoutubeYtDlpArgs(),
       "--dump-single-json",
       "--skip-download",
       "--no-playlist",

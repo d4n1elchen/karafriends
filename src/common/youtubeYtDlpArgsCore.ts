@@ -12,3 +12,20 @@ export function resolveYoutubeCookiesFile(
 
   return fileExists(defaultPath) ? defaultPath : null;
 }
+
+export function buildYoutubeYtDlpArgs(
+  cookieFile: string | null,
+  nodeRuntimePath: string | null,
+): string[] {
+  const args = ["--ignore-config"];
+
+  if (cookieFile) {
+    args.push("--cookies", cookieFile);
+  }
+
+  if (nodeRuntimePath) {
+    args.push("--js-runtimes", `node:${nodeRuntimePath}`);
+  }
+
+  return args;
+}

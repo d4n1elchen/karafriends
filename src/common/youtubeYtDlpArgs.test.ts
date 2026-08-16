@@ -2,7 +2,10 @@ import assert from "assert";
 import path from "path";
 import { describe, it } from "node:test";
 
-import { resolveYoutubeCookiesFile } from "./youtubeYtDlpArgsCore.ts";
+import {
+  buildYoutubeYtDlpArgs,
+  resolveYoutubeCookiesFile,
+} from "./youtubeYtDlpArgsCore.ts";
 
 describe("resolveYoutubeCookiesFile", () => {
   it("resolves an explicitly configured path from the working directory", () => {
@@ -39,5 +42,24 @@ describe("resolveYoutubeCookiesFile", () => {
       ),
       null,
     );
+  });
+});
+
+describe("buildYoutubeYtDlpArgs", () => {
+  it("uses deterministic config, cookies, and the server Node runtime", () => {
+    assert.deepEqual(
+      buildYoutubeYtDlpArgs("/data/youtube-cookies.txt", "/usr/bin/node"),
+      [
+        "--ignore-config",
+        "--cookies",
+        "/data/youtube-cookies.txt",
+        "--js-runtimes",
+        "node:/usr/bin/node",
+      ],
+    );
+  });
+
+  it("omits optional cookie and runtime arguments", () => {
+    assert.deepEqual(buildYoutubeYtDlpArgs(null, null), ["--ignore-config"]);
   });
 });

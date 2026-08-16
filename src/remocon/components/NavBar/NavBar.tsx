@@ -5,7 +5,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 // tslint:disable-next-line:no-submodule-imports no-implicit-dependencies
 import icon from "url:../../images/icon.png";
 
-import { enableAdminMode } from "../../../common/adminMode";
+import { disableAdminMode, enableAdminMode } from "../../../common/adminMode";
 import useConfig from "../../hooks/useConfig";
 import * as styles from "./NavBar.module.scss";
 
@@ -25,10 +25,15 @@ const NavBar = ({
   const [adminError, setAdminError] = useState("");
   const [isUnlocking, setIsUnlocking] = useState(false);
 
-  const clickLogo = () => {
+  const clickAdminTrigger = () => {
     logoClicks.current += 1;
     if (logoClicks.current < 5) return;
     logoClicks.current = 0;
+    if (isAdmin) {
+      disableAdminMode();
+      window.location.reload();
+      return;
+    }
     setAdminError("");
     setShowAdminLogin(true);
   };
@@ -63,7 +68,13 @@ const NavBar = ({
   return (
     <div className={styles.navBar}>
       <div className={styles.actions}>
-        <Link to="/" aria-label="Home" title="Home">
+        <Link
+          className={isAdmin ? styles.adminHome : undefined}
+          to="/"
+          aria-label="Home"
+          title={isAdmin ? "Home (admin mode enabled)" : "Home"}
+          data-admin={isAdmin ? "true" : undefined}
+        >
           <FaHome />
         </Link>
         {!isHome && (
@@ -79,11 +90,11 @@ const NavBar = ({
         )}
       </div>
       <button
-        className={`${styles.logoButton} ${isAdmin ? styles.adminEnabled : ""}`}
+        className={styles.logoButton}
         type="button"
-        onClick={clickLogo}
-        aria-label={isAdmin ? "Admin mode enabled" : "Karafriends"}
-        title={isAdmin ? "Admin mode enabled" : "Karafriends"}
+        onClick={clickAdminTrigger}
+        aria-label="Karafriends"
+        title="Karafriends"
       >
         <img height={40} src={icon} alt="空" />
       </button>
@@ -110,32 +121,24 @@ const NavBar = ({
             aria-labelledby="admin-login-title"
             onSubmit={unlockAdmin}
           >
-            <h2 id="admin-login-title">
-              {isAdmin ? "Admin mode enabled" : "Enable admin mode"}
-            </h2>
-            {!isAdmin && (
-              <>
-                <label htmlFor="admin-password">Admin password</label>
-                <input
-                  id="admin-password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required={true}
-                  autoFocus={true}
-                />
-                {adminError && <p role="alert">{adminError}</p>}
-              </>
-            )}
+            <h2 id="admin-login-title">Enable admin mode</h2>
+            <label htmlFor="admin-password">Admin password</label>
+            <input
+              id="admin-password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required={true}
+              autoFocus={true}
+            />
+            {adminError && <p role="alert">{adminError}</p>}
             <div className={styles.dialogActions}>
               <button type="button" onClick={() => setShowAdminLogin(false)}>
-                {isAdmin ? "Close" : "Cancel"}
+                Cancel
               </button>
-              {!isAdmin && (
-                <button type="submit" disabled={isUnlocking}>
-                  {isUnlocking ? "Checking…" : "Enable"}
-                </button>
-              )}
+              <button type="submit" disabled={isUnlocking}>
+                {isUnlocking ? "Checking…" : "Enable"}
+              </button>
             </div>
           </form>
         </div>

@@ -213,9 +213,9 @@ try {
     remote.waitForSelector("header"),
   ]);
 
-  const logoButton = 'button[aria-label="Karafriends"]';
+  const adminTrigger = 'button[aria-label="Karafriends"]';
   for (let click = 0; click < 5; click += 1) {
-    await remote.click(logoButton);
+    await remote.click(adminTrigger);
   }
   await remote.waitForSelector('form[role="dialog"] input[name="password"]');
   await remote.type('input[name="password"]', "incorrect-smoke-password");
@@ -235,7 +235,20 @@ try {
     remote.waitForNavigation({ waitUntil: "networkidle0" }),
     remote.click('form[role="dialog"] button[type="submit"]'),
   ]);
-  await remote.waitForSelector('button[aria-label="Admin mode enabled"]');
+  await remote.waitForSelector('a[aria-label="Home"][data-admin="true"]');
+  await Promise.all([
+    remote.waitForNavigation({ waitUntil: "networkidle0" }),
+    (async () => {
+      for (let click = 0; click < 5; click += 1) {
+        await remote.click(adminTrigger);
+      }
+    })(),
+  ]);
+  assert.equal(
+    await remote.$('a[aria-label="Home"][data-admin="true"]'),
+    null,
+    "five logo clicks should disable admin mode",
+  );
 
   const invalidRemoteUrl = new URL(remoteUrl);
   invalidRemoteUrl.searchParams.set("remoteToken", "invalid-smoke-token");

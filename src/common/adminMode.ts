@@ -10,6 +10,10 @@ export function getAdminAccessToken(): string | null {
   return sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY);
 }
 
+export function disableAdminMode(): void {
+  sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+}
+
 export async function enableAdminMode(password: string): Promise<void> {
   const remoteToken = getRemoteAccessToken();
   const response = await fetch(REMOCON_ADMIN_LOGIN_PATH, {

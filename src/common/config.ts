@@ -22,10 +22,6 @@ export interface KarafriendsConfig {
   joysoundEmail: string;
   // Joysound password for joysound creds
   joysoundPassword: string;
-  // List of admins by nickname
-  adminNicks: string[];
-  // List of admins by deviceId
-  adminDeviceIds: string[];
   // Password used to open the standalone web player and administration pages
   adminPassword: string;
   // Whether to enable supervised mode
@@ -51,8 +47,6 @@ const DEFAULT_CONFIG: KarafriendsConfig = {
   damPassword: "YOUR_PASSWORD_HERE",
   joysoundEmail: "YOUR_EMAIL_HERE",
   joysoundPassword: "YOUR_PASSWORD_HERE",
-  adminNicks: [],
-  adminDeviceIds: [],
   adminPassword: "",
   supervisedMode: false,
   proxyEnable: false,
@@ -130,6 +124,12 @@ function getConfig(): KarafriendsConfig {
     config.adminPassword = randomBytes(18).toString("base64url");
     generatedAdminPassword = true;
   }
+
+  // Admin access is password-based. Remove identity-list settings from older
+  // configuration files when defaults are written back.
+  delete (config as KarafriendsConfig & { adminNicks?: unknown }).adminNicks;
+  delete (config as KarafriendsConfig & { adminDeviceIds?: unknown })
+    .adminDeviceIds;
 
   // write back defaults (persists any newly-added config fields); best-effort
   // so an unwritable userData directory doesn't crash startup.

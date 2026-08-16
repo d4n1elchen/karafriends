@@ -213,6 +213,30 @@ try {
     remote.waitForSelector("header"),
   ]);
 
+  const logoButton = 'button[aria-label="Karafriends"]';
+  for (let click = 0; click < 5; click += 1) {
+    await remote.click(logoButton);
+  }
+  await remote.waitForSelector('form[role="dialog"] input[name="password"]');
+  await remote.type('input[name="password"]', "incorrect-smoke-password");
+  await remote.click('form[role="dialog"] button[type="submit"]');
+  await remote.waitForSelector('form[role="dialog"] p[role="alert"]');
+  assert.equal(
+    await remote.$eval('form[role="dialog"] p[role="alert"]', (alert) =>
+      alert.textContent.trim(),
+    ),
+    "Incorrect admin password.",
+  );
+  await remote.$eval('input[name="password"]', (input) => {
+    input.value = "";
+  });
+  await remote.type('input[name="password"]', adminPassword);
+  await Promise.all([
+    remote.waitForNavigation({ waitUntil: "networkidle0" }),
+    remote.click('form[role="dialog"] button[type="submit"]'),
+  ]);
+  await remote.waitForSelector('button[aria-label="Admin mode enabled"]');
+
   const invalidRemoteUrl = new URL(remoteUrl);
   invalidRemoteUrl.searchParams.set("remoteToken", "invalid-smoke-token");
 

@@ -13,8 +13,6 @@ const browserConfig: KarafriendsConfig = {
   damPassword: "",
   joysoundEmail: "",
   joysoundPassword: "",
-  adminNicks: [],
-  adminDeviceIds: [],
   adminPassword: "",
   supervisedMode: false,
   proxyEnable: false,

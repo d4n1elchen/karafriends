@@ -21,8 +21,7 @@ const PlaybackControls = () => {
   let isUserEntitled = true;
   if (config !== undefined && config.supervisedMode === true) {
     isUserEntitled =
-      config.adminNicks.includes(identity.nickname) ||
-      config.adminDeviceIds.includes(identity.deviceId) ||
+      config.isAdmin ||
       (currentSong !== undefined &&
         currentSong !== null &&
         currentSong.userIdentity !== undefined &&
@@ -32,7 +31,7 @@ const PlaybackControls = () => {
 
   const disabled = !isPlaybackControllable || !isUserEntitled;
   console.log(
-    `isPlaybackControllable=${isPlaybackControllable}, isUserEntitled=${isUserEntitled}, disabled=${disabled}`
+    `isPlaybackControllable=${isPlaybackControllable}, isUserEntitled=${isUserEntitled}, disabled=${disabled}`,
   );
 
   return (

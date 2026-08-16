@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import fs from "fs";
 import { createServer, IncomingMessage } from "http";
 import path from "path";
@@ -27,7 +28,11 @@ import { Innertube } from "youtubei.js";
 
 // tslint:disable-next-line:no-submodule-imports no-implicit-dependencies
 import rawSchema from "inline-string:../common/schema.graphql";
-import karafriendsConfig, { KarafriendsConfig } from "../common/config";
+import {
+  REMOCON_ADMIN_LOGIN_PATH,
+  REMOCON_ADMIN_TOKEN_HEADER,
+} from "../common/adminAuthCore";
+import karafriendsConfig from "../common/config";
 import { debugError } from "../common/debug";
 import { normalizeRoomId } from "../common/roomIdCore";
 import { getYoutubeMetadataWithYtDlp } from "../common/youtubeMetadata";
@@ -41,6 +46,7 @@ import {
 } from "./../common/videoDownloader";
 import { DkwebsysAPI, MinseiAPI, MinseiCredentialsProvider } from "./damApi";
 import { JoysoundAPI, JoysoundCredentialsProvider } from "./joysoundApi";
+import { secureEqual } from "../server/webAuthCore";
 
 import { memoize } from "lodash";
 import "regenerator-runtime/runtime"; // tslint:disable-line:no-submodule-imports
@@ -53,6 +59,7 @@ export interface IGraphQLContext {
     youtube: Innertube;
   };
   room: RoomRuntime;
+  isAdmin: boolean;
 }
 
 interface JoysoundSongParent {
@@ -414,6 +421,7 @@ interface WatchData {
 function hasMaxSongsInQueue(
   room: RoomRuntime,
   userIdentity: UserIdentity,
+  isAdmin: boolean,
 ): boolean {
   // Not very efficient, but surely the queue won't ever get so big that this would be considered expensive
   const songsQueuedByUser: number = room.db.songQueue.filter(
@@ -427,23 +435,11 @@ function hasMaxSongsInQueue(
   console.log(
     `hasMaxSongsInQueue: user ${userIdentity.nickname} has ${songsQueuedByUser}, ${songsDownloadingByUser} downloading`,
   );
-  console.log(
-    `adminNicks=${karafriendsConfig.adminNicks}, adminDeviceIds=${karafriendsConfig.adminDeviceIds}`,
-  );
-
   return (
-    !karafriendsConfig.adminNicks.includes(userIdentity.nickname) &&
-    !karafriendsConfig.adminDeviceIds.includes(userIdentity.deviceId) &&
+    !isAdmin &&
     karafriendsConfig.paxSongQueueLimit > 0 &&
     songsQueuedByUser + songsDownloadingByUser >=
       karafriendsConfig.paxSongQueueLimit
-  );
-}
-
-function canPushToHeadOfQueue(userIdentity: UserIdentity): boolean {
-  return (
-    karafriendsConfig.adminNicks.includes(userIdentity.nickname) ||
-    karafriendsConfig.adminDeviceIds.includes(userIdentity.deviceId)
   );
 }
 
@@ -831,9 +827,10 @@ const resolvers = {
       if (!room.db.songQueue.length) return [];
       return room.db.songQueue;
     },
-    config: () => {
+    config: (_: any, __: any, { isAdmin }: IGraphQLContext) => {
       return {
-        ...karafriendsConfig,
+        isAdmin,
+        supervisedMode: karafriendsConfig.supervisedMode,
         __typename: "KarafriendsConfig",
       };
     },
@@ -989,7 +986,7 @@ const resolvers = {
     queueJoysoundSong: (
       _: any,
       args: { input: QueueJoysoundSongInput; tryHeadOfQueue: boolean },
-      { dataSources, room }: IGraphQLContext,
+      { dataSources, room, isAdmin }: IGraphQLContext,
     ): QueueSongResult => {
       const queueItem: JoysoundQueueItem = {
         __typename: "JoysoundQueueItem",
@@ -997,15 +994,14 @@ const resolvers = {
         ...args.input,
       };
 
-      if (hasMaxSongsInQueue(room, queueItem.userIdentity)) {
+      if (hasMaxSongsInQueue(room, queueItem.userIdentity, isAdmin)) {
         return {
           __typename: "QueueSongError",
           reason: `${queueItem.userIdentity.nickname} already has ${karafriendsConfig.paxSongQueueLimit} song(s) in the queue or downloading`,
         };
       }
 
-      const pushToHead =
-        args.tryHeadOfQueue && canPushToHeadOfQueue(queueItem.userIdentity);
+      const pushToHead = args.tryHeadOfQueue && isAdmin;
       console.log(`queueJoysoundSong: pushToHead=${pushToHead}`);
 
       downloadJoysoundData(
@@ -1028,7 +1024,7 @@ const resolvers = {
     queueDamSong: (
       _: any,
       args: { input: QueueDamSongInput; tryHeadOfQueue: boolean },
-      { dataSources, room }: IGraphQLContext,
+      { dataSources, room, isAdmin }: IGraphQLContext,
     ): QueueSongResult => {
       const queueItem: DamQueueItem = {
         timestamp: Date.now().toString(),
@@ -1036,15 +1032,14 @@ const resolvers = {
         __typename: "DamQueueItem",
       };
 
-      if (hasMaxSongsInQueue(room, queueItem.userIdentity)) {
+      if (hasMaxSongsInQueue(room, queueItem.userIdentity, isAdmin)) {
         return {
           __typename: "QueueSongError",
           reason: `${queueItem.userIdentity.nickname} already has ${karafriendsConfig.paxSongQueueLimit} song(s) in the queue or downloading`,
         };
       }
 
-      const pushToHead =
-        args.tryHeadOfQueue && canPushToHeadOfQueue(queueItem.userIdentity);
+      const pushToHead = args.tryHeadOfQueue && isAdmin;
       console.log(`queueDamSong: pushToHead=${pushToHead}`);
 
       console.log(`Starting offline download of ${queueItem.songId}`);
@@ -1064,7 +1059,7 @@ const resolvers = {
     queueYoutubeSong: (
       _: any,
       args: { input: QueueYoutubeSongInput; tryHeadOfQueue: boolean },
-      { room }: IGraphQLContext,
+      { room, isAdmin }: IGraphQLContext,
     ): QueueSongResult => {
       const queueItem: YoutubeQueueItem = {
         timestamp: Date.now().toString(),
@@ -1075,15 +1070,14 @@ const resolvers = {
         __typename: "YoutubeQueueItem",
       };
 
-      if (hasMaxSongsInQueue(room, queueItem.userIdentity)) {
+      if (hasMaxSongsInQueue(room, queueItem.userIdentity, isAdmin)) {
         return {
           __typename: "QueueSongError",
           reason: `${queueItem.userIdentity.nickname} already has ${karafriendsConfig.paxSongQueueLimit} song(s) in the queue or downloading`,
         };
       }
 
-      const pushToHead =
-        args.tryHeadOfQueue && canPushToHeadOfQueue(queueItem.userIdentity);
+      const pushToHead = args.tryHeadOfQueue && isAdmin;
       console.log(`queueDamSong: pushToHead=${pushToHead}`);
 
       if (args.input.adhocSongLyrics) {
@@ -1112,7 +1106,7 @@ const resolvers = {
     queueNicoSong: (
       _: any,
       args: { input: QueueNicoSongInput; tryHeadOfQueue: boolean },
-      { room }: IGraphQLContext,
+      { room, isAdmin }: IGraphQLContext,
     ): QueueSongResult => {
       const queueItem: NicoQueueItem = {
         timestamp: Date.now().toString(),
@@ -1120,15 +1114,14 @@ const resolvers = {
         __typename: "NicoQueueItem",
       };
 
-      if (hasMaxSongsInQueue(room, queueItem.userIdentity)) {
+      if (hasMaxSongsInQueue(room, queueItem.userIdentity, isAdmin)) {
         return {
           __typename: "QueueSongError",
           reason: `${queueItem.userIdentity.nickname} already has ${karafriendsConfig.paxSongQueueLimit} song(s) in the queue or downloading`,
         };
       }
 
-      const pushToHead =
-        args.tryHeadOfQueue && canPushToHeadOfQueue(queueItem.userIdentity);
+      const pushToHead = args.tryHeadOfQueue && isAdmin;
       console.log(`queueDamSong: pushToHead=${pushToHead}`);
 
       downloadNicoVideo(
@@ -1370,6 +1363,17 @@ export function applyGraphQLMiddleware(
   const httpServer = createServer(app);
   const port = options.port ?? karafriendsConfig.remoconPort;
   const host = options.host;
+  const remoconAdminToken = randomBytes(32).toString("base64url");
+
+  app.post(REMOCON_ADMIN_LOGIN_PATH, express.json(), (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    if (!secureEqual(req.body?.password, karafriendsConfig.adminPassword)) {
+      res.status(401).json({ error: "Incorrect admin password" });
+      return;
+    }
+
+    res.json({ adminToken: remoconAdminToken });
+  });
 
   const wsServer = new WebSocketServer({
     server: httpServer,
@@ -1405,6 +1409,10 @@ export function applyGraphQLMiddleware(
       context: (ctx) => ({
         dataSources: undefined as unknown as IGraphQLContext["dataSources"],
         room: getRoom(ctx.connectionParams?.roomId),
+        isAdmin: secureEqual(
+          ctx.connectionParams?.adminToken,
+          remoconAdminToken,
+        ),
       }),
     },
     wsServer,
@@ -1482,10 +1490,15 @@ export function applyGraphQLMiddleware(
           context: async ({ req }: { req: Request }) => {
             const innertubeApiInstance = await innertubeApiProvider();
             const roomHeader = req.headers["x-karafriends-room"];
+            const adminHeader = req.headers[REMOCON_ADMIN_TOKEN_HEADER];
 
             return {
               room: getRoom(
                 Array.isArray(roomHeader) ? roomHeader[0] : roomHeader,
+              ),
+              isAdmin: secureEqual(
+                Array.isArray(adminHeader) ? adminHeader[0] : adminHeader,
+                remoconAdminToken,
               ),
               dataSources: {
                 minsei: new MinseiAPI(minseiCredentialsProvider, {

@@ -320,7 +320,7 @@ type NicoQueueItem implements QueueItemInterface {
 }
 
 union QueueItem =
-    DamQueueItem
+  | DamQueueItem
   | JoysoundQueueItem
   | YoutubeQueueItem
   | NicoQueueItem
@@ -396,7 +396,6 @@ type VideoDownloadProgress {
 }
 
 type KarafriendsConfig {
-  adminNicks: [String!]!
-  adminDeviceIds: [String!]!
+  isAdmin: Boolean!
   supervisedMode: Boolean!
 }

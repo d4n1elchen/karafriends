@@ -11,8 +11,7 @@ import {
 const configQuery = graphql`
   query useConfigQuery {
     config {
-      adminNicks
-      adminDeviceIds
+      isAdmin
       supervisedMode
     }
   }
@@ -27,7 +26,7 @@ export default function useConfig() {
     const initialQuery = fetchQuery<useConfigQuery>(
       environment,
       configQuery,
-      {}
+      {},
     ).subscribe({
       next: (response: useConfigQuery$data) => setConfig(response.config),
     });

@@ -6,6 +6,7 @@ import compression from "compression";
 import express from "express";
 
 import karafriendsConfig from "../common/config";
+import { REMOCON_ADMIN_LOGIN_PATH } from "../common/adminAuthCore";
 import { debugLog, isDebugEnabled } from "../common/debug";
 import { ensureExternalResources } from "../common/externalResources";
 import { normalizeRoomId } from "../common/roomIdCore";
@@ -164,7 +165,7 @@ app.use((req, res, next) => {
   }
 
   if (
-    req.path === "/graphql" &&
+    (req.path === "/graphql" || req.path === REMOCON_ADMIN_LOGIN_PATH) &&
     hasRemoteAccess(req.headers[REMOTE_TOKEN_HEADER])
   ) {
     next();

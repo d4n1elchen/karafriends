@@ -47,11 +47,9 @@ const SongQueueItem = ({ item, eta, myNickname, isCurrent }: Props) => {
   if (config !== undefined) {
     const itemOwnedByUser =
       item.userIdentity!.nickname === identity.nickname ||
-      item.userIdentity!.deviceId === identity.nickname;
+      item.userIdentity!.deviceId === identity.deviceId;
     canRemove =
-      config.adminNicks.includes(identity.nickname) ||
-      config.adminDeviceIds.includes(identity.deviceId) ||
-      !(config.supervisedMode === true && !itemOwnedByUser);
+      config.isAdmin || !(config.supervisedMode === true && !itemOwnedByUser);
   }
 
   const itemType = item.__typename;

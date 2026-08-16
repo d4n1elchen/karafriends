@@ -6,6 +6,7 @@ import {
   reportClientRecovered,
 } from "./clientError";
 import { getRemoteAccessToken, getRoomId } from "./roomId";
+import { adminRequestHeaders, getAdminAccessToken } from "./adminMode";
 
 import { createClient } from "graphql-ws";
 import {
@@ -41,6 +42,7 @@ async function fetchQuery(request: RequestParameters, variables: Variables) {
           "Content-Type": "application/json",
           "X-Karafriends-Room": getRoomId(),
           ...(remoteToken ? { "X-Karafriends-Remote-Token": remoteToken } : {}),
+          ...adminRequestHeaders(),
         },
         body: JSON.stringify({
           query: request.text,
@@ -106,6 +108,7 @@ const subscriptionClient = createClient({
   connectionParams: () => ({
     roomId: getRoomId(),
     remoteToken: getRemoteAccessToken(),
+    adminToken: getAdminAccessToken(),
   }),
   shouldRetry: () => !isAuthorizationRequired(),
   on: {

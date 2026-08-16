@@ -55,6 +55,7 @@ const YouTubeInfo = ({ videoId }: Props) => {
   const videoData = useLazyLoadQuery<YouTubeInfoVideoInfoQuery>(
     youTubeInfoVideoInfoQuery,
     { videoId },
+    { fetchPolicy: "network-only" },
   );
 
   useEffect(() => {

@@ -1,3 +1,15 @@
+.qrcodeLink {
+  display: block;
+  line-height: 0;
+}
+
+.qrcodeLink:focus-visible {
+  outline: 3px solid #1cb3ff;
+  outline-offset: -3px;
+}
+
 .qrcode {
+  display: block;
   width: 100%;
+  cursor: pointer;
 }

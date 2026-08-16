@@ -60,7 +60,21 @@ function QRCode(props: { hostname: string }) {
     return () => window.removeEventListener("resize", update);
   }, [remoteUrl]);
 
-  return <canvas ref={canvasRef} className="qrcode" />;
+  return (
+    <a
+      className="qrcodeLink"
+      href={remoteUrl || undefined}
+      target="_blank"
+      rel="noreferrer"
+      aria-label="Open phone remote in a new tab"
+      title="Open phone remote"
+      onClick={(event) => {
+        if (!remoteUrl) event.preventDefault();
+      }}
+    >
+      <canvas ref={canvasRef} className="qrcode" />
+    </a>
+  );
 }
 
 export default QRCode;

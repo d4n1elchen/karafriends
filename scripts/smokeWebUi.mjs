@@ -81,6 +81,16 @@ try {
   await page.click("button.btn-large");
   await page.waitForSelector("video.karaVid");
   await page.waitForSelector("canvas.qrcode");
+  const qrLink = await page.$eval("a.qrcodeLink", (link) => ({
+    href: link.href,
+    target: link.target,
+  }));
+  assert.equal(qrLink.target, "_blank");
+  assert.equal(new URL(qrLink.href).searchParams.get("room"), roomId);
+  assert.match(
+    new URL(qrLink.href).searchParams.get("remoteToken"),
+    /^[A-Za-z0-9_-]{40,}$/,
+  );
   const playerLayout = await page.evaluate(() => ({
     pageWidth: document.body.scrollWidth,
     sidebarWidth: document.querySelector(".appSidebar").clientWidth,
@@ -168,7 +178,13 @@ try {
   const invalidRemoteUrl = new URL(remoteUrl);
   invalidRemoteUrl.searchParams.set("remoteToken", "invalid-smoke-token");
 
-  const disconnectedRemote = await browser.newPage();
+  // Use a separate browser context so the admin cookie from the player login
+  // cannot accidentally authorize these deliberately broken remote requests.
+  const unauthenticatedContext = await browser.createBrowserContext();
+  const disconnectedRemote = await unauthenticatedContext.newPage();
+  await disconnectedRemote.evaluateOnNewDocument(() => {
+    localStorage.setItem("nickname", "Smoke Guest");
+  });
   monitorTelemetry(disconnectedRemote);
   await disconnectedRemote.setRequestInterception(true);
   disconnectedRemote.on("request", (request) => {
@@ -192,7 +208,10 @@ try {
     "remote UI was replaced after a network error",
   );
 
-  const failedPage = await browser.newPage();
+  const failedPage = await unauthenticatedContext.newPage();
+  await failedPage.evaluateOnNewDocument(() => {
+    localStorage.setItem("nickname", "Smoke Guest");
+  });
   monitorTelemetry(failedPage);
   await failedPage.setRequestInterception(true);
   failedPage.on("request", (request) => {
@@ -215,6 +234,7 @@ try {
     (button) => button.textContent.trim(),
   );
   assert.equal(retryLabel, "Try again");
+  await unauthenticatedContext.close();
 
   assert.deepEqual(pageErrors, []);
   assert.deepEqual(

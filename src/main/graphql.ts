@@ -36,6 +36,7 @@ import karafriendsConfig from "../common/config";
 import { debugError } from "../common/debug";
 import { normalizeRoomId } from "../common/roomIdCore";
 import { getYoutubeMetadataWithYtDlp } from "../common/youtubeMetadata";
+import { getYoutubeCookiesFile } from "../common/youtubeYtDlpArgs";
 import {
   downloadDamVideo,
   downloadJoysoundData,
@@ -863,6 +864,24 @@ const resolvers = {
       { dataSources }: IGraphQLContext,
     ): Promise<YoutubeVideoInfoResult> => {
       let youtubeJsReason = "Unknown";
+      const preferYtDlp = getYoutubeCookiesFile() !== null;
+
+      if (preferYtDlp) {
+        try {
+          const metadata = await getYoutubeMetadataWithYtDlp(args.videoId);
+          return {
+            __typename: "YoutubeVideoInfo",
+            ...metadata,
+          };
+        } catch (error) {
+          debugError(
+            "youtube",
+            `Preferred yt-dlp metadata lookup failed for ${args.videoId}; trying YouTube.js`,
+            error,
+          );
+        }
+      }
+
       try {
         // youtubei.js's response is loosely/partially typed and its shape
         // shifts between versions, so treat it as untyped here.
@@ -909,23 +928,26 @@ const resolvers = {
         );
       }
 
-      try {
-        const metadata = await getYoutubeMetadataWithYtDlp(args.videoId);
-        return {
-          __typename: "YoutubeVideoInfo",
-          ...metadata,
-        };
-      } catch (error) {
-        debugError(
-          "youtube",
-          `yt-dlp metadata fallback failed for ${args.videoId}`,
-          error,
-        );
-        return {
-          __typename: "YoutubeVideoInfoError",
-          reason: youtubeJsReason,
-        };
+      if (!preferYtDlp) {
+        try {
+          const metadata = await getYoutubeMetadataWithYtDlp(args.videoId);
+          return {
+            __typename: "YoutubeVideoInfo",
+            ...metadata,
+          };
+        } catch (error) {
+          debugError(
+            "youtube",
+            `yt-dlp metadata fallback failed for ${args.videoId}`,
+            error,
+          );
+        }
       }
+
+      return {
+        __typename: "YoutubeVideoInfoError",
+        reason: youtubeJsReason,
+      };
     },
     nicoVideoInfo: async (
       _: any,

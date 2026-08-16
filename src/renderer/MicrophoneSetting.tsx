@@ -1,5 +1,5 @@
 import M from "materialize-css";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import "./global";
 import { InputDevice, InputDeviceOption } from "./nativeAudio";
@@ -32,6 +32,7 @@ export default function MicrophoneSetting({ mic, onChange }: Props) {
   const [devices, setDevices] = useState<InputDeviceOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const selectRef = useRef<HTMLSelectElement>(null);
 
   const refreshDevices = async (requestPermission: boolean) => {
     setLoading(true);
@@ -48,11 +49,38 @@ export default function MicrophoneSetting({ mic, onChange }: Props) {
   };
 
   useEffect(() => {
-    M.AutoInit();
     if (window.karafriends.isDesktop || mic !== null) {
       void refreshDevices(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!selectRef.current) return;
+    const instance = M.FormSelect.init(selectRef.current);
+    return () => instance.destroy();
+  }, [devices, mic]);
+
+  const enableBrowserMicrophone = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const availableDevices = await InputDevice.available(true);
+      setDevices(availableDevices);
+      const defaultDevice =
+        availableDevices.find((device) => device.id === "default") ||
+        availableDevices[0];
+      if (!defaultDevice) {
+        throw new Error("No microphone was found by this browser.");
+      }
+      onChange(await InputDevice.create(defaultDevice, 0));
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Microphone access failed",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (!window.karafriends.isDesktop && devices.length === 0) {
     return (
@@ -60,7 +88,7 @@ export default function MicrophoneSetting({ mic, onChange }: Props) {
         <button
           className="btn"
           disabled={loading}
-          onClick={() => void refreshDevices(true)}
+          onClick={() => void enableBrowserMicrophone()}
         >
           {loading ? "Requesting microphone…" : "Enable microphone"}
         </button>
@@ -72,6 +100,7 @@ export default function MicrophoneSetting({ mic, onChange }: Props) {
   return (
     <div className="input-field">
       <select
+        ref={selectRef}
         value={mic ? `${mic.deviceId}_${mic.channelSelection}` : ""}
         onChange={(e) => {
           const dataset = e.target.options[e.target.selectedIndex].dataset;

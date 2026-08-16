@@ -40,7 +40,16 @@ export class InputDevice {
         .map(([name, channelCount]) => ({ id: name, name, channelCount }));
     }
 
-    if (!navigator.mediaDevices?.enumerateDevices) return [];
+    if (
+      !navigator.mediaDevices?.enumerateDevices ||
+      !navigator.mediaDevices.getUserMedia
+    ) {
+      throw new Error(
+        window.isSecureContext
+          ? "Microphone access is not supported by this browser."
+          : "Microphone access requires HTTPS or localhost.",
+      );
+    }
 
     if (requestPermission) {
       const permissionStream = await navigator.mediaDevices.getUserMedia({

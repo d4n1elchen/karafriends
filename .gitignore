@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+/.pnp.*
+/.yarn/cache
 /.yarn/install-state.gz
 /.yarn/unplugged
 /.yarn/sdks

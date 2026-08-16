@@ -29,6 +29,9 @@ const NavBar = ({
   return (
     <div className={styles.navBar}>
       <div className={styles.actions}>
+        <Link to="/" aria-label="Home" title="Home">
+          <FaHome />
+        </Link>
         {!isHome && (
           <button
             className={styles.iconButton}
@@ -40,9 +43,6 @@ const NavBar = ({
             <FaArrowLeft />
           </button>
         )}
-        <Link to="/" aria-label="Home" title="Home">
-          <FaHome />
-        </Link>
       </div>
       <img height={40} src={icon} alt="空" />
       <div className={styles.actions}>

@@ -1055,54 +1055,17 @@ function downloadYoutubeVideoImpl(
     ? ["--write-subs", "--sub-langs", captionCode]
     : [];
 
-  const ytdlp = spawn(
-    resourcePaths.ytdlp,
-    [
-      ...captionArgs,
-      "-S",
-      "res:720,ext:mp4:m4a",
-      "--recode",
-      "mp4",
-      "-N",
-      "4",
-      "--ffmpeg-location",
-      resourcePaths.ffmpeg,
-      "-o",
-      `${videoFilename}`,
-      "--",
-      videoId,
-    ],
-    { stdio: ["ignore", "pipe", "pipe"] },
-  );
-
-  invariant(ytdlp.stdout);
-  invariant(ytdlp.stderr);
-
-  ytdlp.stdout.pipe(process.stdout);
-  ytdlp.stdout.pipe(ytdlpLogStream);
-  ytdlp.stderr.pipe(process.stderr);
-  ytdlp.stderr.pipe(ytdlpLogStream);
-
-  ytdlp.stdout.on("data", (data) => {
-    handleYoutubeDownloadLog(data.toString(), downloadQueueItem);
-  });
-
-  handleProcessError(ytdlp, "yt-dlp", () => {
+  const failDownload = (code: number | null, signal: NodeJS.Signals | null) => {
     removeVideoDownloadFromQueue(downloadQueue, downloadQueueItem);
     safeUnlink(tempFilename);
-  });
+    console.error(
+      `Error downloading Youtube Video with ID ${videoId}: code=${code}, signal=${signal}, log=${ytdlpLogFilename}`,
+    );
+  };
 
-  ytdlp.on("exit", (code, signal) => {
+  const finishDownload = () => {
     removeVideoDownloadFromQueue(downloadQueue, downloadQueueItem);
-
     safeUnlink(tempFilename);
-
-    if (code !== 0) {
-      console.error(
-        `Error downloading Youtube Video with ID ${videoId}: code=${code}, signal=${signal}, log=${ytdlpLogFilename}`,
-      );
-      return;
-    }
 
     if (captionCode) {
       try {
@@ -1115,7 +1078,67 @@ function downloadYoutubeVideoImpl(
     }
 
     onComplete();
-  });
+  };
+
+  const runYtDlp = (useProgressiveFallback: boolean) => {
+    const formatArgs = useProgressiveFallback
+      ? ["-f", "18/b[height<=720][ext=mp4]/b[height<=720]"]
+      : ["-S", "res:720,ext:mp4:m4a", "-N", "4"];
+    const ytdlp = spawn(
+      resourcePaths.ytdlp,
+      [
+        ...captionArgs,
+        ...formatArgs,
+        "--recode",
+        "mp4",
+        "--ffmpeg-location",
+        resourcePaths.ffmpeg,
+        "-o",
+        videoFilename,
+        "--",
+        videoId,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+
+    invariant(ytdlp.stdout);
+    invariant(ytdlp.stderr);
+
+    ytdlp.stdout.pipe(process.stdout);
+    ytdlp.stdout.pipe(ytdlpLogStream, { end: false });
+    ytdlp.stderr.pipe(process.stderr);
+    ytdlp.stderr.pipe(ytdlpLogStream, { end: false });
+
+    ytdlp.stdout.on("data", (data) => {
+      handleYoutubeDownloadLog(data.toString(), downloadQueueItem);
+    });
+
+    handleProcessError(ytdlp, "yt-dlp", () => {
+      failDownload(null, null);
+    });
+
+    ytdlp.on("exit", (code, signal) => {
+      if (code === 0) {
+        ytdlpLogStream.end();
+        finishDownload();
+        return;
+      }
+
+      if (!useProgressiveFallback) {
+        console.warn(
+          `Preferred YouTube formats failed for ${videoId}; retrying with a progressive MP4`,
+        );
+        downloadQueueItem.progress = 0;
+        runYtDlp(true);
+        return;
+      }
+
+      ytdlpLogStream.end();
+      failDownload(code, signal);
+    });
+  };
+
+  runYtDlp(false);
 }
 
 export function downloadNicoVideo(

@@ -31,12 +31,6 @@
   width: max(10vw, 12rem);
 }
 
-.appSidebar .qrcode {
-  align-self: center;
-  max-width: 13rem;
-  flex: 0 1 auto;
-}
-
 .appSidebar nav {
   flex: 0 0 auto;
   height: 3.5rem;
@@ -108,10 +102,6 @@
 }
 
 @media (max-height: 720px) {
-  .appSidebar .qrcode {
-    max-width: 12rem;
-  }
-
   .appSettings {
     padding-top: 0.5rem !important;
     padding-bottom: 0.5rem !important;

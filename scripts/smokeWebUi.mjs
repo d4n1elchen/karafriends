@@ -91,11 +91,21 @@ try {
     new URL(qrLink.href).searchParams.get("remoteToken"),
     /^[A-Za-z0-9_-]{40,}$/,
   );
-  const playerLayout = await page.evaluate(() => ({
-    pageWidth: document.body.scrollWidth,
-    sidebarWidth: document.querySelector(".appSidebar").clientWidth,
-    viewportWidth: window.innerWidth,
-  }));
+  const playerLayout = await page.evaluate(() => {
+    const sidebar = document.querySelector(".appSidebar");
+    const qrCode = document.querySelector(".qrcodeLink");
+    const sidebarRect = sidebar.getBoundingClientRect();
+    const qrCodeRect = qrCode.getBoundingClientRect();
+    return {
+      pageWidth: document.body.scrollWidth,
+      sidebarWidth: sidebar.clientWidth,
+      sidebarLeft: sidebarRect.left,
+      qrCodeWidth: qrCodeRect.width,
+      qrCodeHeight: qrCodeRect.height,
+      qrCodeLeft: qrCodeRect.left,
+      viewportWidth: window.innerWidth,
+    };
+  });
   assert.ok(
     Math.abs(playerLayout.sidebarWidth / playerLayout.viewportWidth - 0.1) <
       0.01,
@@ -105,6 +115,18 @@ try {
     playerLayout.pageWidth,
     playerLayout.viewportWidth,
     "player layout should not overflow horizontally",
+  );
+  assert.ok(
+    Math.abs(playerLayout.qrCodeWidth - playerLayout.sidebarWidth) < 1,
+    "QR code width should match the sidebar width",
+  );
+  assert.ok(
+    Math.abs(playerLayout.qrCodeHeight - playerLayout.sidebarWidth) < 1,
+    "QR code should be square",
+  );
+  assert.ok(
+    Math.abs(playerLayout.qrCodeLeft - playerLayout.sidebarLeft) < 1,
+    "QR code should be centered in the sidebar",
   );
   const settingsToggle = 'button[aria-controls="player-settings"]';
   assert.equal(

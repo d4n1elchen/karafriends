@@ -7,16 +7,23 @@ import {
   buildYoutubeYtDlpArgs,
   resolveYoutubeCookiesFile,
 } from "./youtubeYtDlpArgsCore";
+import { prepareYoutubeCookieFile } from "./youtubeCookieFile";
 
 export const YOUTUBE_COOKIES_FILENAME = "youtube-cookies.txt";
 
-export function getYoutubeYtDlpArgs(): string[] {
-  const cookieFile = resolveYoutubeCookiesFile(
+export interface PreparedYoutubeYtDlpArgs {
+  args: string[];
+  cleanup: () => void;
+}
+
+export function prepareYoutubeYtDlpArgs(): PreparedYoutubeYtDlpArgs {
+  const sourceCookieFile = resolveYoutubeCookiesFile(
     process.env.KARAFRIENDS_YOUTUBE_COOKIES_FILE,
     path.join(getConfigDirectory(), YOUTUBE_COOKIES_FILENAME),
     process.cwd(),
     fs.existsSync,
   );
+  const preparedCookieFile = prepareYoutubeCookieFile(sourceCookieFile);
 
   // The standalone web server is already running under a supported Node
   // executable. Explicitly give it to yt-dlp so current YouTube JavaScript
@@ -24,5 +31,8 @@ export function getYoutubeYtDlpArgs(): string[] {
   // is not a drop-in Node CLI, so preserve the desktop behavior there.
   const nodeRuntimePath = isElectronRuntime() ? null : process.execPath;
 
-  return buildYoutubeYtDlpArgs(cookieFile, nodeRuntimePath);
+  return {
+    args: buildYoutubeYtDlpArgs(preparedCookieFile.cookieFile, nodeRuntimePath),
+    cleanup: preparedCookieFile.cleanup,
+  };
 }

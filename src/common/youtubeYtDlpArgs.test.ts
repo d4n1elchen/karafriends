@@ -46,11 +46,10 @@ describe("resolveYoutubeCookiesFile", () => {
 });
 
 describe("buildYoutubeYtDlpArgs", () => {
-  it("uses deterministic config, cookies, and the server Node runtime", () => {
+  it("uses cookies and the server Node runtime", () => {
     assert.deepEqual(
       buildYoutubeYtDlpArgs("/data/youtube-cookies.txt", "/usr/bin/node"),
       [
-        "--ignore-config",
         "--cookies",
         "/data/youtube-cookies.txt",
         "--js-runtimes",
@@ -60,6 +59,6 @@ describe("buildYoutubeYtDlpArgs", () => {
   });
 
   it("omits optional cookie and runtime arguments", () => {
-    assert.deepEqual(buildYoutubeYtDlpArgs(null, null), ["--ignore-config"]);
+    assert.deepEqual(buildYoutubeYtDlpArgs(null, null), []);
   });
 });

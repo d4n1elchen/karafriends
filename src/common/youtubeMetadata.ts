@@ -3,7 +3,7 @@ import { promisify } from "util";
 
 import { ensureExternalResources, getResourcePaths } from "./externalResources";
 import { parseYtDlpMetadata, YoutubeMetadata } from "./youtubeMetadataCore";
-import { prepareYoutubeYtDlpArgs } from "./youtubeYtDlpArgs";
+import { getYoutubeYtDlpArgs } from "./youtubeYtDlpArgs";
 
 const execFileAsync = promisify(execFile);
 const YOUTUBE_VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
@@ -19,28 +19,23 @@ export async function getYoutubeMetadataWithYtDlp(
 
   await ensureExternalResources();
   const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  const preparedArgs = prepareYoutubeYtDlpArgs();
-  try {
-    const { stdout } = await execFileAsync(
-      getResourcePaths().ytdlp,
-      [
-        ...preparedArgs.args,
-        "--dump-single-json",
-        "--skip-download",
-        "--no-playlist",
-        "--no-warnings",
-        "--",
-        videoUrl,
-      ],
-      {
-        maxBuffer: YT_DLP_MAX_OUTPUT_BYTES,
-        timeout: YT_DLP_TIMEOUT_MS,
-        windowsHide: true,
-      },
-    );
+  const { stdout } = await execFileAsync(
+    getResourcePaths().ytdlp,
+    [
+      ...getYoutubeYtDlpArgs(),
+      "--dump-single-json",
+      "--skip-download",
+      "--no-playlist",
+      "--no-warnings",
+      "--",
+      videoUrl,
+    ],
+    {
+      maxBuffer: YT_DLP_MAX_OUTPUT_BYTES,
+      timeout: YT_DLP_TIMEOUT_MS,
+      windowsHide: true,
+    },
+  );
 
-    return parseYtDlpMetadata(stdout);
-  } finally {
-    preparedArgs.cleanup();
-  }
+  return parseYtDlpMetadata(stdout);
 }

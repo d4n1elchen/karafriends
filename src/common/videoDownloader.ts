@@ -20,7 +20,7 @@ import {
   getJoysoundTelopDuration,
 } from "./joysoundMediaMetadata";
 import { getWebDataDirectory, isElectronRuntime } from "./runtimePaths";
-import { prepareYoutubeYtDlpArgs } from "./youtubeYtDlpArgs";
+import { getYoutubeYtDlpArgs } from "./youtubeYtDlpArgs";
 
 export const TEMP_FOLDER: string =
   process.env.KARAFRIENDS_MEDIA_DIR ||
@@ -388,11 +388,10 @@ function downloadJoysoundYoutubeVideoPromise(
     // Don't need a proxy to download from YouTube
     delete process.env.http_proxy;
 
-    const preparedArgs = prepareYoutubeYtDlpArgs();
     const ytdlp = spawn(
       resourcePaths.ytdlp,
       [
-        ...preparedArgs.args,
+        ...getYoutubeYtDlpArgs(),
         "-S",
         "res:720,ext:mp4",
         "-f",
@@ -427,13 +426,11 @@ function downloadJoysoundYoutubeVideoPromise(
     });
 
     handleProcessError(ytdlp, "yt-dlp (Joysound/YouTube)", () => {
-      preparedArgs.cleanup();
       removeVideoDownloadFromQueue(downloadQueue, downloadQueueItem);
       reject(-1);
     });
 
     ytdlp.on("exit", (code, signal) => {
-      preparedArgs.cleanup();
       if (code === 0) {
         safeUnlink(tempFilename);
         safeRename(tempFilename + ".mp4", tempFilename);
@@ -1089,11 +1086,10 @@ function downloadYoutubeVideoImpl(
     const formatArgs = useProgressiveFallback
       ? ["-f", "18/b[height<=720][ext=mp4]/b[height<=720]"]
       : ["-S", "res:720,ext:mp4:m4a", "-N", "4"];
-    const preparedArgs = prepareYoutubeYtDlpArgs();
     const ytdlp = spawn(
       resourcePaths.ytdlp,
       [
-        ...preparedArgs.args,
+        ...getYoutubeYtDlpArgs(),
         ...captionArgs,
         ...formatArgs,
         "--recode",
@@ -1121,12 +1117,10 @@ function downloadYoutubeVideoImpl(
     });
 
     handleProcessError(ytdlp, "yt-dlp", () => {
-      preparedArgs.cleanup();
       failDownload(null, null);
     });
 
     ytdlp.on("exit", (code, signal) => {
-      preparedArgs.cleanup();
       if (code === 0) {
         ytdlpLogStream.end();
         finishDownload();

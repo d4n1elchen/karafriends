@@ -17,7 +17,7 @@ export function buildYoutubeYtDlpArgs(
   cookieFile: string | null,
   nodeRuntimePath: string | null,
 ): string[] {
-  const args: string[] = [];
+  const args = ["--ignore-config"];
 
   if (cookieFile) {
     args.push("--cookies", cookieFile);

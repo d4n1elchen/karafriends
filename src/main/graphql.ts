@@ -21,7 +21,6 @@ import { makeExecutableSchema } from "@graphql-tools/schema";
 import express, { Application, Request } from "express";
 import { PubSub } from "graphql-subscriptions";
 import { useServer } from "graphql-ws/use/ws"; // tslint:disable-line:no-submodule-imports
-import { Nicovideo } from "niconico";
 import nodeFetch from "node-fetch";
 import tunnel from "tunnel";
 import { Innertube } from "youtubei.js";
@@ -34,6 +33,7 @@ import {
 } from "../common/adminAuthCore";
 import karafriendsConfig from "../common/config";
 import { debugError } from "../common/debug";
+import { getNiconicoMetadata } from "../common/niconicoMetadata";
 import { normalizeRoomId } from "../common/roomIdCore";
 import { getYoutubeMetadataWithYtDlp } from "../common/youtubeMetadata";
 import {
@@ -409,26 +409,6 @@ function loadDb(dbPath: string): RoomDatabase {
     }
     return defaults;
   }
-}
-
-const nicovideo = new Nicovideo();
-
-interface WatchData {
-  owner: {
-    id: number;
-    nickname: string;
-  };
-  video: {
-    count: {
-      view: number;
-    };
-    description: string;
-    duration: number;
-    title: string;
-    thumbnail: {
-      player: string;
-    };
-  };
 }
 
 function hasMaxSongsInQueue(
@@ -985,22 +965,21 @@ const resolvers = {
       args: { videoId: string },
     ): Promise<NicoVideoInfoResult> => {
       try {
-        // @ts-ignore
-        const watchData: WatchData = await nicovideo.watch(args.videoId);
+        const metadata = await getNiconicoMetadata(args.videoId);
         return {
           __typename: "NicoVideoInfo",
-          author: watchData.owner.nickname,
-          channelId: watchData.owner.id.toString(10),
-          description: watchData.video.description,
-          lengthSeconds: watchData.video.duration,
-          title: watchData.video.title,
-          thumbnailUrl: watchData.video.thumbnail.player,
-          viewCount: watchData.video.count.view,
+          ...metadata,
         };
-      } catch (e) {
+      } catch (error) {
+        debugError(
+          "niconico",
+          `Failed to get Niconico metadata for ${args.videoId}`,
+          error,
+        );
         return {
           __typename: "NicoVideoInfoError",
-          reason: "Failed getting video info. Maybe an invalid VideoID?",
+          reason:
+            "Niconico could not load this video. It may be private, deleted, or unavailable.",
         };
       }
     },

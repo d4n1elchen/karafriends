@@ -143,6 +143,19 @@ interface YoutubeVideoInfoError {
 
 type YoutubeVideoInfoResult = YoutubeVideoInfo | YoutubeVideoInfoError;
 
+interface YoutubeSearchResult {
+  readonly videoId: string;
+  readonly title: string;
+  readonly author: string;
+  readonly thumbnailUrl: string | null;
+  readonly duration: string | null;
+}
+
+interface YoutubeSearchResponse {
+  readonly results: YoutubeSearchResult[];
+  readonly error: string | null;
+}
+
 interface NicoVideoInfo extends VideoInfo {
   readonly __typename: "NicoVideoInfo";
   readonly thumbnailUrl: string;
@@ -924,6 +937,46 @@ const resolvers = {
         return {
           __typename: "YoutubeVideoInfoError",
           reason: youtubeJsReason,
+        };
+      }
+    },
+    youtubeSearch: async (
+      _: any,
+      args: { query: string },
+      { dataSources }: IGraphQLContext,
+    ): Promise<YoutubeSearchResponse> => {
+      const query = args.query.trim();
+      if (!query) return { results: [], error: null };
+
+      try {
+        // Search result node types vary between youtubei.js releases. The
+        // video filter normally returns Video nodes, but only depend on the
+        // stable fields needed by the remocon here.
+        const search: any = await dataSources.youtube.search(query, {
+          type: "video",
+        });
+        const results = (search.results || [])
+          .filter((result: any) => result.video_id && result.title)
+          .slice(0, 20)
+          .map((result: any): YoutubeSearchResult => ({
+            videoId: result.video_id,
+            title: result.title.text ?? result.title.toString(),
+            author:
+              result.author?.name ?? result.author?.toString?.() ?? "Unknown",
+            thumbnailUrl:
+              result.best_thumbnail?.url ??
+              result.thumbnails?.[result.thumbnails.length - 1]?.url ??
+              null,
+            duration: result.length_text?.text ?? result.duration?.text ?? null,
+          }));
+
+        return { results, error: null };
+      } catch (error) {
+        debugError("youtube", `YouTube search failed for ${query}`, error);
+        return {
+          results: [],
+          error:
+            error instanceof Error ? error.message : "YouTube search failed",
         };
       }
     },

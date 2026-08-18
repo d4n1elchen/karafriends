@@ -1,0 +1,31 @@
+.result {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.thumbnail {
+  width: 120px;
+  max-width: 38%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 4px;
+  flex: 0 0 auto;
+}
+
+.metadata {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.duration {
+  color: #777;
+  font-size: 0.9em;
+}
+
+.error {
+  margin-top: 8px;
+  color: #c62828;
+}

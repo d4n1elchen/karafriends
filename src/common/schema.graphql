@@ -32,6 +32,7 @@ type Query {
     songId: String!
     suffix: String
   ): VideoDownloadProgress!
+  youtubeSearch(query: String!): YoutubeSearchResponse!
   youtubeVideoInfo(videoId: String): YoutubeVideoInfoResult!
 }
 
@@ -366,6 +367,19 @@ type YoutubeVideoInfoError {
 }
 
 union YoutubeVideoInfoResult = YoutubeVideoInfo | YoutubeVideoInfoError
+
+type YoutubeSearchResponse {
+  results: [YoutubeSearchResult!]!
+  error: String
+}
+
+type YoutubeSearchResult {
+  videoId: String!
+  title: String!
+  author: String!
+  thumbnailUrl: String
+  duration: String
+}
 
 type NicoVideoInfo implements VideoInfo {
   author: String!

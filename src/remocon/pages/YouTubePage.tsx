@@ -60,7 +60,7 @@ const YouTubePage = () => {
   const currentSong = useNowPlaying();
 
   const params = useParams<YouTubeParams>();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [videoId, setVideoId] = useState<string>(params.videoId || "");
@@ -80,11 +80,13 @@ const YouTubePage = () => {
     if (newVideoId !== null && isYouTubeVideoId(newVideoId)) {
       setVideoId(newVideoId);
       setQuery("");
-      history.replaceState({}, "", `#/search/youtube/${newVideoId}`);
+      navigate(`/search/youtube/${newVideoId}`, { replace: true });
     } else if (input) {
       setVideoId("");
       setQuery(input);
-      setSearchParams({ query: input }, { replace: true });
+      navigate(`/search/youtube?query=${encodeURIComponent(input)}`, {
+        replace: true,
+      });
     }
   };
 

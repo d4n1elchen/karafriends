@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useParams, useSearchParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 
 import Button from "../components/Button";
 import NiconicoInfo from "../components/NiconicoInfo";
@@ -27,8 +27,9 @@ type NiconicoParams = {
 };
 
 const NiconicoPage = () => {
+  const navigate = useNavigate();
   const params = useParams<NiconicoParams>();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const inputRef = useRef<HTMLInputElement>(null);
   const [videoId, setVideoId] = useState<string>(params.videoId || "");
   const [query, setQuery] = useState<string>(searchParams.get("query") || "");
@@ -47,11 +48,13 @@ const NiconicoPage = () => {
     if (newVideoId !== null && isNiconicoVideoId(newVideoId)) {
       setVideoId(newVideoId);
       setQuery("");
-      history.replaceState({}, "", `#/search/niconico/${newVideoId}`);
+      navigate(`/search/niconico/${newVideoId}`, { replace: true });
     } else if (input) {
       setVideoId("");
       setQuery(input);
-      setSearchParams({ query: input }, { replace: true });
+      navigate(`/search/niconico?query=${encodeURIComponent(input)}`, {
+        replace: true,
+      });
     }
   };
 

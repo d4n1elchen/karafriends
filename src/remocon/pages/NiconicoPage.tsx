@@ -1,8 +1,9 @@
-import React, { useRef, useState } from "react";
-import { useParams } from "react-router";
+import React, { useEffect, useRef, useState } from "react";
+import { useParams, useSearchParams } from "react-router";
 
 import Button from "../components/Button";
 import NiconicoInfo from "../components/NiconicoInfo";
+import NiconicoSearchResults from "../components/NiconicoSearchResults";
 import SearchFormWrapper from "../components/SearchFormWrapper";
 
 function getVideoId(videoQuery: string): string | null {
@@ -17,36 +18,56 @@ function getVideoId(videoQuery: string): string | null {
   return videoQuery;
 }
 
+function isNiconicoVideoId(videoQuery: string): boolean {
+  return /^[A-Za-z]{1,8}\d+$/.test(videoQuery);
+}
+
 type NiconicoParams = {
   videoId: string;
 };
 
 const NiconicoPage = () => {
   const params = useParams<NiconicoParams>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const inputRef = useRef<HTMLInputElement>(null);
   const [videoId, setVideoId] = useState<string>(params.videoId || "");
+  const [query, setQuery] = useState<string>(searchParams.get("query") || "");
+
+  useEffect(() => {
+    const routeVideoId = params.videoId || "";
+    setVideoId(routeVideoId);
+    setQuery(routeVideoId ? "" : searchParams.get("query") || "");
+  }, [params.videoId, searchParams]);
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputRef.current) return;
-    const newVideoId = getVideoId(inputRef.current.value);
-    if (newVideoId !== null) {
+    const input = inputRef.current.value.trim();
+    const newVideoId = getVideoId(input);
+    if (newVideoId !== null && isNiconicoVideoId(newVideoId)) {
       setVideoId(newVideoId);
+      setQuery("");
       history.replaceState({}, "", `#/search/niconico/${newVideoId}`);
+    } else if (input) {
+      setVideoId("");
+      setQuery(input);
+      setSearchParams({ query: input }, { replace: true });
     }
   };
 
   return (
     <SearchFormWrapper>
-      <h2>Add Niconico video</h2>
+      <h2>Search Niconico</h2>
       <form onSubmit={onSubmit}>
         <input
+          key={videoId || query}
           ref={inputRef}
-          placeholder="Niconico video URL or ID"
-          defaultValue={videoId}
+          placeholder="Song name, Niconico URL, or video ID"
+          defaultValue={videoId || query}
         />
-        <Button type="submit">Get Video Info</Button>
+        <Button type="submit">Search</Button>
       </form>
+      {query !== "" && <NiconicoSearchResults query={query} />}
       {videoId !== "" && <NiconicoInfo videoId={videoId} />}
     </SearchFormWrapper>
   );

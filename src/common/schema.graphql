@@ -21,6 +21,7 @@ type Query {
     after: String
   ): JoysoundSongConnection!
   nicoVideoInfo(videoId: String): NicoVideoInfoResult!
+  niconicoSearch(query: String!): NiconicoSearchResponse!
   pitchShiftSemis: Int!
   playbackState: PlaybackState!
   queue: [QueueItem!]!
@@ -367,6 +368,19 @@ type YoutubeVideoInfoError {
 }
 
 union YoutubeVideoInfoResult = YoutubeVideoInfo | YoutubeVideoInfoError
+
+type NiconicoSearchResponse {
+  results: [NiconicoSearchResult!]!
+  error: String
+}
+
+type NiconicoSearchResult {
+  videoId: String!
+  title: String!
+  thumbnailUrl: String
+  lengthSeconds: Int!
+  viewCount: Int!
+}
 
 type YoutubeSearchResponse {
   results: [YoutubeSearchResult!]!

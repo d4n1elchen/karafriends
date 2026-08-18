@@ -34,6 +34,7 @@ import {
 import karafriendsConfig from "../common/config";
 import { debugError } from "../common/debug";
 import { getNiconicoMetadata } from "../common/niconicoMetadata";
+import { NiconicoSearchResult, searchNiconico } from "../common/niconicoSearch";
 import { normalizeRoomId } from "../common/roomIdCore";
 import { getYoutubeMetadataWithYtDlp } from "../common/youtubeMetadata";
 import {
@@ -167,6 +168,11 @@ interface NicoVideoInfoError {
 }
 
 type NicoVideoInfoResult = NicoVideoInfo | NicoVideoInfoError;
+
+interface NiconicoSearchResponse {
+  readonly results: NiconicoSearchResult[];
+  readonly error: string | null;
+}
 
 export interface UserIdentity {
   readonly deviceId: string;
@@ -980,6 +986,24 @@ const resolvers = {
           __typename: "NicoVideoInfoError",
           reason:
             "Niconico could not load this video. It may be private, deleted, or unavailable.",
+        };
+      }
+    },
+    niconicoSearch: async (
+      _: any,
+      args: { query: string },
+    ): Promise<NiconicoSearchResponse> => {
+      const query = args.query.trim();
+      if (!query) return { results: [], error: null };
+
+      try {
+        return { results: await searchNiconico(query), error: null };
+      } catch (error) {
+        debugError("niconico", `Niconico search failed for ${query}`, error);
+        return {
+          results: [],
+          error:
+            error instanceof Error ? error.message : "Niconico search failed",
         };
       }
     },

@@ -19,23 +19,34 @@ export async function getYoutubeMetadataWithYtDlp(
 
   await ensureExternalResources();
   const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  const { stdout } = await execFileAsync(
-    getResourcePaths().ytdlp,
-    [
-      ...getYoutubeYtDlpArgs(),
-      "--dump-single-json",
-      "--skip-download",
-      "--no-playlist",
-      "--no-warnings",
-      "--",
-      videoUrl,
-    ],
-    {
-      maxBuffer: YT_DLP_MAX_OUTPUT_BYTES,
-      timeout: YT_DLP_TIMEOUT_MS,
-      windowsHide: true,
-    },
-  );
+  const runYtDlp = async (playerClient?: string) =>
+    execFileAsync(
+      getResourcePaths().ytdlp,
+      [
+        ...getYoutubeYtDlpArgs(playerClient),
+        "--dump-single-json",
+        "--skip-download",
+        "--no-playlist",
+        "--no-warnings",
+        "--",
+        videoUrl,
+      ],
+      {
+        maxBuffer: YT_DLP_MAX_OUTPUT_BYTES,
+        timeout: YT_DLP_TIMEOUT_MS,
+        windowsHide: true,
+      },
+    );
+
+  let stdout: string;
+  try {
+    ({ stdout } = await runYtDlp());
+  } catch (error) {
+    console.warn(
+      `Default yt-dlp clients failed for ${videoId}; retrying with web_embedded`,
+    );
+    ({ stdout } = await runYtDlp("web_embedded"));
+  }
 
   return parseYtDlpMetadata(stdout);
 }

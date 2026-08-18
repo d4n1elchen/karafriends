@@ -378,6 +378,7 @@ function downloadJoysoundYoutubeVideoPromise(
   downloadQueue: DownloadQueueItem[],
   downloadQueueItem: DownloadQueueItem,
   tempFilename: string,
+  useEmbeddedFallback = false,
 ): Promise<number> {
   return new Promise((resolve, reject) => {
     const ytdlpLogFilename = `${TEMP_FOLDER}/yt-${youtubeVideoId}.log`;
@@ -391,7 +392,9 @@ function downloadJoysoundYoutubeVideoPromise(
     const ytdlp = spawn(
       resourcePaths.ytdlp,
       [
-        ...getYoutubeYtDlpArgs(),
+        ...getYoutubeYtDlpArgs(
+          useEmbeddedFallback ? "web_embedded" : undefined,
+        ),
         "-S",
         "res:720,ext:mp4",
         "-f",
@@ -438,7 +441,22 @@ function downloadJoysoundYoutubeVideoPromise(
         removeVideoDownloadFromQueue(downloadQueue, downloadQueueItem);
 
         resolve(code);
+      } else if (!useEmbeddedFallback) {
+        console.warn(
+          `Default yt-dlp clients failed for ${youtubeVideoId}; retrying with web_embedded`,
+        );
+        resolve(
+          downloadJoysoundYoutubeVideoPromise(
+            songId,
+            youtubeVideoId,
+            downloadQueue,
+            downloadQueueItem,
+            tempFilename,
+            true,
+          ),
+        );
       } else {
+        removeVideoDownloadFromQueue(downloadQueue, downloadQueueItem);
         console.error(
           `Error downloading Youtube Video with ID ${youtubeVideoId}: code=${code}, signal=${signal}, log=${ytdlpLogFilename}`,
         );
@@ -1082,14 +1100,14 @@ function downloadYoutubeVideoImpl(
     onComplete();
   };
 
-  const runYtDlp = (useProgressiveFallback: boolean) => {
+  const runYtDlp = (useProgressiveFallback: boolean, playerClient?: string) => {
     const formatArgs = useProgressiveFallback
       ? ["-f", "18/b[height<=720][ext=mp4]/b[height<=720]"]
       : ["-S", "res:720,ext:mp4:m4a", "-N", "4"];
     const ytdlp = spawn(
       resourcePaths.ytdlp,
       [
-        ...getYoutubeYtDlpArgs(),
+        ...getYoutubeYtDlpArgs(playerClient),
         ...captionArgs,
         ...formatArgs,
         "--recode",
@@ -1129,10 +1147,19 @@ function downloadYoutubeVideoImpl(
 
       if (!useProgressiveFallback) {
         console.warn(
-          `Preferred YouTube formats failed for ${videoId}; retrying with a progressive MP4`,
+          `Preferred YouTube formats failed for ${videoId}${playerClient ? ` using ${playerClient}` : ""}; retrying with a progressive MP4`,
         );
         downloadQueueItem.progress = 0;
-        runYtDlp(true);
+        runYtDlp(true, playerClient);
+        return;
+      }
+
+      if (!playerClient) {
+        console.warn(
+          `Default yt-dlp clients failed for ${videoId}; retrying with web_embedded`,
+        );
+        downloadQueueItem.progress = 0;
+        runYtDlp(false, "web_embedded");
         return;
       }
 

@@ -10,7 +10,7 @@ import {
 
 export const YOUTUBE_COOKIES_FILENAME = "youtube-cookies.txt";
 
-export function getYoutubeYtDlpArgs(): string[] {
+export function getYoutubeYtDlpArgs(playerClient?: string): string[] {
   const cookieFile = resolveYoutubeCookiesFile(
     process.env.KARAFRIENDS_YOUTUBE_COOKIES_FILE,
     path.join(getConfigDirectory(), YOUTUBE_COOKIES_FILENAME),
@@ -24,5 +24,5 @@ export function getYoutubeYtDlpArgs(): string[] {
   // is not a drop-in Node CLI, so preserve the desktop behavior there.
   const nodeRuntimePath = isElectronRuntime() ? null : process.execPath;
 
-  return buildYoutubeYtDlpArgs(cookieFile, nodeRuntimePath);
+  return buildYoutubeYtDlpArgs(cookieFile, nodeRuntimePath, playerClient);
 }

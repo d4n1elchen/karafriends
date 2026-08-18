@@ -62,4 +62,17 @@ describe("buildYoutubeYtDlpArgs", () => {
   it("omits optional cookie and runtime arguments", () => {
     assert.deepEqual(buildYoutubeYtDlpArgs(null, null), ["--ignore-config"]);
   });
+
+  it("can select a fallback YouTube player client", () => {
+    assert.deepEqual(
+      buildYoutubeYtDlpArgs(null, "/usr/bin/node", "web_embedded"),
+      [
+        "--ignore-config",
+        "--js-runtimes",
+        "node:/usr/bin/node",
+        "--extractor-args",
+        "youtube:player_client=web_embedded",
+      ],
+    );
+  });
 });

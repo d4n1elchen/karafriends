@@ -16,6 +16,7 @@ export function resolveYoutubeCookiesFile(
 export function buildYoutubeYtDlpArgs(
   cookieFile: string | null,
   nodeRuntimePath: string | null,
+  playerClient?: string,
 ): string[] {
   const args = ["--ignore-config"];
 
@@ -25,6 +26,10 @@ export function buildYoutubeYtDlpArgs(
 
   if (nodeRuntimePath) {
     args.push("--js-runtimes", `node:${nodeRuntimePath}`);
+  }
+
+  if (playerClient) {
+    args.push("--extractor-args", `youtube:player_client=${playerClient}`);
   }
 
   return args;

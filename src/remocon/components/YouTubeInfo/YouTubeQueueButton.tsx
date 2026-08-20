@@ -1,31 +1,22 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { fetchQuery, graphql, useMutation } from "react-relay";
 import { Subscription } from "relay-runtime";
 import { invariant } from "ts-invariant";
 
 import environment from "../../../common/graphqlEnvironment";
 import Button from "../Button";
+import { DOWNLOADING_TEXT, queuedText } from "../queueButtonText";
 
 import { YouTubeInfoVideoInfoQuery$data } from "./__generated__/YouTubeInfoVideoInfoQuery.graphql";
-import { YouTubeQueueButtonGetVideoDownloadProgressQuery } from "./__generated__/YouTubeQueueButtonGetVideoDownloadProgressQuery.graphql";
+import { YouTubeQueueButtonSongQueuedQuery } from "./__generated__/YouTubeQueueButtonSongQueuedQuery.graphql";
 import {
   YouTubeQueueButtonMutation,
   YouTubeQueueButtonMutation$variables,
 } from "./__generated__/YouTubeQueueButtonMutation.graphql";
 
-const youTubeQueueButtonGetVideoDownloadProgressQuery = graphql`
-  query YouTubeQueueButtonGetVideoDownloadProgressQuery(
-    $videoDownloadType: Int!
-    $songId: String!
-    $suffix: String
-  ) {
-    videoDownloadProgress(
-      videoDownloadType: $videoDownloadType
-      songId: $songId
-      suffix: $suffix
-    ) {
-      progress
-    }
+const youTubeQueueButtonSongQueuedQuery = graphql`
+  query YouTubeQueueButtonSongQueuedQuery($timestamp: String!) {
+    songQueued(timestamp: $timestamp)
   }
 `;
 
@@ -38,6 +29,7 @@ const youTubeQueueButtonMutation = graphql`
       ... on QueueSongInfo {
         __typename
         eta
+        timestamp
       }
       ... on QueueSongError {
         __typename
@@ -66,8 +58,10 @@ const YouTubeQueueButton = ({
 
   const defaultText = "Queue video";
   const [text, setText] = useState(defaultText);
+  const queuedTextRef = useRef<string | null>(null);
+  const queuedTimestampRef = useRef<string | null>(null);
   const [commit] = useMutation<YouTubeQueueButtonMutation>(
-    youTubeQueueButtonMutation
+    youTubeQueueButtonMutation,
   );
 
   useEffect(() => {
@@ -77,38 +71,23 @@ const YouTubeQueueButton = ({
     let timeoutId: number | null = null;
     let subscription: Subscription | null = null;
 
-    if (text === "Finished Downloading" || text.includes("Error")) {
+    if (text.startsWith("Queued") || text.includes("Error")) {
       timeoutId = window.setTimeout(() => setText(defaultText), 2500);
     } else if (text !== defaultText && text !== "Waiting for server...") {
       intervalId = window.setInterval(() => {
-        subscription =
-          fetchQuery<YouTubeQueueButtonGetVideoDownloadProgressQuery>(
-            environment,
-            youTubeQueueButtonGetVideoDownloadProgressQuery,
-            {
-              videoDownloadType: 1,
-              songId: videoId,
-              suffix: null,
+        subscription = fetchQuery<YouTubeQueueButtonSongQueuedQuery>(
+          environment,
+          youTubeQueueButtonSongQueuedQuery,
+          {
+            timestamp: queuedTimestampRef.current!,
+          },
+        ).subscribe({
+          next: (data: YouTubeQueueButtonSongQueuedQuery["response"]) => {
+            if (data.songQueued) {
+              setText(queuedTextRef.current || "Queued");
             }
-          ).subscribe({
-            next: (
-              data: YouTubeQueueButtonGetVideoDownloadProgressQuery["response"]
-            ) => {
-              if (
-                data.videoDownloadProgress.progress === 1.0 ||
-                (text !== "Downloading" &&
-                  data.videoDownloadProgress.progress === -1.0)
-              ) {
-                setText("Finished Downloading");
-              } else {
-                setText(
-                  `Downloading -- ${(
-                    data.videoDownloadProgress.progress * 100
-                  ).toFixed(1)}%`
-                );
-              }
-            },
-          });
+          },
+        });
       }, 1000);
     }
 
@@ -148,13 +127,16 @@ const YouTubeQueueButton = ({
       onCompleted: ({ queueYoutubeSong }) => {
         switch (queueYoutubeSong.__typename) {
           case "QueueSongInfo":
-            setText("Downloading");
+            queuedTextRef.current = queuedText(queueYoutubeSong.eta);
+            queuedTimestampRef.current = queueYoutubeSong.timestamp;
+            setText(DOWNLOADING_TEXT);
             break;
           case "QueueSongError":
             setText(`Error: ${queueYoutubeSong.reason}`);
             break;
         }
       },
+      onError: () => setText("Error: unable to queue song"),
     });
   };
 

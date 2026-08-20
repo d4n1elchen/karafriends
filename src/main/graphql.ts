@@ -222,6 +222,7 @@ type QueueItem =
 type QueueSongInfo = {
   readonly __typename: "QueueSongInfo";
   readonly eta: number;
+  readonly timestamp: string;
 };
 
 interface QueueSongError {
@@ -482,9 +483,7 @@ function pushSongToQueue(
   queueItem: QueueItem,
   pushToHead: boolean = false,
 ): QueueSongResult {
-  const eta =
-    (room.db.currentSong?.playtime || 0) +
-    room.db.songQueue.reduce((acc, cur) => acc + (cur.playtime || 0), 0);
+  const eta = getQueueEta(room);
 
   console.log(
     `pushSongToQueue: pushing ${JSON.stringify(
@@ -516,7 +515,15 @@ function pushSongToQueue(
   return {
     __typename: "QueueSongInfo",
     eta,
+    timestamp: queueItem.timestamp,
   };
+}
+
+function getQueueEta(room: RoomRuntime): number {
+  return (
+    (room.db.currentSong?.playtime || 0) +
+    room.db.songQueue.reduce((acc, cur) => acc + (cur.playtime || 0), 0)
+  );
 }
 
 function cleanupAdhocSongLyrics(lyrics: string): string[] {
@@ -1091,6 +1098,13 @@ const resolvers = {
 
       return { progress };
     },
+    songQueued: (
+      _: any,
+      args: { timestamp: string },
+      { room }: IGraphQLContext,
+    ): boolean =>
+      room.db.currentSong?.timestamp === args.timestamp ||
+      room.db.songQueue.some((item) => item.timestamp === args.timestamp),
   },
   Mutation: {
     sendEmote: (
@@ -1145,10 +1159,8 @@ const resolvers = {
 
       return {
         __typename: "QueueSongInfo",
-        eta: room.db.songQueue.reduce(
-          (acc, cur) => acc + (cur.playtime || 0),
-          0,
-        ),
+        eta: getQueueEta(room),
+        timestamp: queueItem.timestamp,
       };
     },
     queueDamSong: (
@@ -1244,9 +1256,8 @@ const resolvers = {
       // but let's optimistically return the eta assuming it will successfully queue
       return {
         __typename: "QueueSongInfo",
-        eta:
-          room.db.songQueue.reduce((acc, cur) => acc + (cur.playtime || 0), 0) +
-          (args.input.playtime || 0),
+        eta: getQueueEta(room),
+        timestamp: queueItem.timestamp,
       };
     },
     queueNicoSong: (
@@ -1284,9 +1295,8 @@ const resolvers = {
       // but let's optimistically return the eta assuming it will successfully queue
       return {
         __typename: "QueueSongInfo",
-        eta:
-          room.db.songQueue.reduce((acc, cur) => acc + (cur.playtime || 0), 0) +
-          (args.input.playtime || 0),
+        eta: getQueueEta(room),
+        timestamp: queueItem.timestamp,
       };
     },
     pushAdhocLyrics: (

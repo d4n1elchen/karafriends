@@ -1,31 +1,22 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { fetchQuery, graphql, useMutation } from "react-relay";
 import { Subscription } from "relay-runtime";
 import { invariant } from "ts-invariant";
 
 import environment from "../../../common/graphqlEnvironment";
 import Button from "../Button";
+import { DOWNLOADING_TEXT, queuedText } from "../queueButtonText";
 
 import { NiconicoInfoVideoInfoQuery$data } from "./__generated__/NiconicoInfoVideoInfoQuery.graphql";
-import { NiconicoQueueButtonGetVideoDownloadProgressQuery } from "./__generated__/NiconicoQueueButtonGetVideoDownloadProgressQuery.graphql";
+import { NiconicoQueueButtonSongQueuedQuery } from "./__generated__/NiconicoQueueButtonSongQueuedQuery.graphql";
 import {
   NiconicoQueueButtonMutation,
   NiconicoQueueButtonMutation$variables,
 } from "./__generated__/NiconicoQueueButtonMutation.graphql";
 
-const niconicoQueueButtonGetVideoDownloadProgressQuery = graphql`
-  query NiconicoQueueButtonGetVideoDownloadProgressQuery(
-    $videoDownloadType: Int!
-    $songId: String!
-    $suffix: String
-  ) {
-    videoDownloadProgress(
-      videoDownloadType: $videoDownloadType
-      songId: $songId
-      suffix: $suffix
-    ) {
-      progress
-    }
+const niconicoQueueButtonSongQueuedQuery = graphql`
+  query NiconicoQueueButtonSongQueuedQuery($timestamp: String!) {
+    songQueued(timestamp: $timestamp)
   }
 `;
 
@@ -38,6 +29,7 @@ const niconicoQueueButtonMutation = graphql`
       ... on QueueSongInfo {
         __typename
         eta
+        timestamp
       }
       ... on QueueSongError {
         __typename
@@ -58,8 +50,10 @@ const NiconicoQueueButton = ({ videoId, videoInfo, userIdentity }: Props) => {
 
   const defaultText = "Queue video";
   const [text, setText] = useState(defaultText);
+  const queuedTextRef = useRef<string | null>(null);
+  const queuedTimestampRef = useRef<string | null>(null);
   const [commit] = useMutation<NiconicoQueueButtonMutation>(
-    niconicoQueueButtonMutation
+    niconicoQueueButtonMutation,
   );
 
   useEffect(() => {
@@ -69,38 +63,23 @@ const NiconicoQueueButton = ({ videoId, videoInfo, userIdentity }: Props) => {
     let timeoutId: number | null = null;
     let subscription: Subscription | null = null;
 
-    if (text === "Finished Downloading" || text.includes("Error")) {
+    if (text.startsWith("Queued") || text.includes("Error")) {
       timeoutId = window.setTimeout(() => setText(defaultText), 2500);
     } else if (text !== defaultText && text !== "Waiting for server...") {
       intervalId = window.setInterval(() => {
-        subscription =
-          fetchQuery<NiconicoQueueButtonGetVideoDownloadProgressQuery>(
-            environment,
-            niconicoQueueButtonGetVideoDownloadProgressQuery,
-            {
-              videoDownloadType: 2,
-              songId: videoId,
-              suffix: null,
+        subscription = fetchQuery<NiconicoQueueButtonSongQueuedQuery>(
+          environment,
+          niconicoQueueButtonSongQueuedQuery,
+          {
+            timestamp: queuedTimestampRef.current!,
+          },
+        ).subscribe({
+          next: (data: NiconicoQueueButtonSongQueuedQuery["response"]) => {
+            if (data.songQueued) {
+              setText(queuedTextRef.current || "Queued");
             }
-          ).subscribe({
-            next: (
-              data: NiconicoQueueButtonGetVideoDownloadProgressQuery["response"]
-            ) => {
-              if (
-                data.videoDownloadProgress.progress === 1.0 ||
-                (text !== "Downloading" &&
-                  data.videoDownloadProgress.progress === -1.0)
-              ) {
-                setText("Finished Downloading");
-              } else {
-                setText(
-                  `Downloading -- ${(
-                    data.videoDownloadProgress.progress * 100
-                  ).toFixed(1)}%`
-                );
-              }
-            },
-          });
+          },
+        });
       }, 1000);
     }
 
@@ -137,13 +116,16 @@ const NiconicoQueueButton = ({ videoId, videoInfo, userIdentity }: Props) => {
       onCompleted: ({ queueNicoSong }) => {
         switch (queueNicoSong.__typename) {
           case "QueueSongInfo":
-            setText("Downloading");
+            queuedTextRef.current = queuedText(queueNicoSong.eta);
+            queuedTimestampRef.current = queueNicoSong.timestamp;
+            setText(DOWNLOADING_TEXT);
             break;
           case "QueueSongError":
             setText(`Error: ${queueNicoSong.reason}`);
             break;
         }
       },
+      onError: () => setText("Error: unable to queue song"),
     });
   };
 

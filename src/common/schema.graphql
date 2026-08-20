@@ -25,6 +25,7 @@ type Query {
   pitchShiftSemis: Int!
   playbackState: PlaybackState!
   queue: [QueueItem!]!
+  songQueued(timestamp: String!): Boolean!
   songById(id: String!): Song!
   songsByName(name: String, first: Int, after: String): SongConnection!
   songHistory(first: Int, after: String): SongHistoryConnection!
@@ -351,6 +352,7 @@ union QueueItem =
 
 type QueueSongInfo {
   eta: Int!
+  timestamp: String!
 }
 
 type QueueSongError {

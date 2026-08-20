@@ -1,9 +1,9 @@
-import formatDuration from "format-duration";
 import React, { useEffect, useState } from "react";
 import { graphql, useMutation } from "react-relay";
 
 import { SongPageQuery$data } from "../../pages/__generated__/SongPageQuery.graphql";
 import Button from "../Button";
+import { queuedText } from "../queueButtonText";
 import {
   DamQueueButtonMutation,
   DamQueueButtonMutation$variables,
@@ -18,6 +18,7 @@ const damQueueButtonMutation = graphql`
       ... on QueueSongInfo {
         __typename
         eta
+        timestamp
       }
       ... on QueueSongError {
         __typename
@@ -78,7 +79,7 @@ const DamQueueButton = ({ song, streamingUrlIndex, userIdentity }: Props) => {
       onCompleted: ({ queueDamSong }) => {
         switch (queueDamSong.__typename) {
           case "QueueSongInfo":
-            setText(`Queued — T-${formatDuration(queueDamSong.eta * 1000)}`);
+            setText(queuedText(queueDamSong.eta));
             break;
           case "QueueSongError":
             setText(`Error: ${queueDamSong.reason}`);

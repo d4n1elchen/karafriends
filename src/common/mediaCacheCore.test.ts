@@ -25,6 +25,10 @@ test("Joysound requires its selected video and telop", () => {
     ],
   );
   assert.deepEqual(
+    getMediaCacheRequirements(mediaDirectory, "JOYSOUND", "1234", ""),
+    getMediaCacheRequirements(mediaDirectory, "JOYSOUND", "1234", null),
+  );
+  assert.deepEqual(
     getMediaCacheRequirements(mediaDirectory, "JOYSOUND", "1234", "ytId"),
     [
       path.join(mediaDirectory, "joysound-1234-ytId.mp4"),

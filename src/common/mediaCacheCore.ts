@@ -39,24 +39,27 @@ export function getMediaCacheRequirements(
   songId: string,
   suffix: string | null,
 ): string[] {
+  const normalizedSuffix =
+    source === "JOYSOUND" && suffix === "" ? null : suffix;
+
   if (!safeCacheKey.test(songId)) {
     return [];
   }
 
-  if (suffix !== null && !safeCacheKey.test(suffix)) {
+  if (normalizedSuffix !== null && !safeCacheKey.test(normalizedSuffix)) {
     return [];
   }
 
   switch (source) {
     case "DAM":
-      return suffix === null
+      return normalizedSuffix === null
         ? []
-        : [path.join(mediaDirectory, `${songId}-${suffix}.mp4`)];
+        : [path.join(mediaDirectory, `${songId}-${normalizedSuffix}.mp4`)];
     case "JOYSOUND":
       return [
         path.join(
           mediaDirectory,
-          `joysound-${songId}-${suffix || "default"}.mp4`,
+          `joysound-${songId}-${normalizedSuffix || "default"}.mp4`,
         ),
         path.join(mediaDirectory, `joysound-${songId}.joy_02`),
       ];

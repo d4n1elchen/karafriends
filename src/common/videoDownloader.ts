@@ -21,7 +21,6 @@ import {
 } from "./joysoundMediaMetadata";
 import { getWebDataDirectory, isElectronRuntime } from "./runtimePaths";
 import { getYoutubeYtDlpArgs } from "./youtubeYtDlpArgs";
-import { isDownloadableYoutubeCaptionCode } from "./youtubeCaptionLanguages";
 import {
   getMediaCacheRequirements,
   hasAnyMediaCache,
@@ -77,6 +76,8 @@ export function isAnyMediaDownloaded(
 ): boolean {
   return hasAnyMediaCache(getMediaCacheSnapshot(), source, songId);
 }
+
+const captionCodeRe: RegExp = new RegExp(/^[a-z]{2}$/);
 
 interface JoysoundVideoData {
   songId: string;
@@ -1072,7 +1073,7 @@ function downloadYoutubeVideoImpl(
   captionCode: string | null,
   onComplete: () => any,
 ): void {
-  if (captionCode !== null && !isDownloadableYoutubeCaptionCode(captionCode)) {
+  if (captionCode !== null && !captionCodeRe.test(captionCode)) {
     console.error(
       `Error downloading Youtube Video. ${captionCode} is not a valid caption code`,
     );

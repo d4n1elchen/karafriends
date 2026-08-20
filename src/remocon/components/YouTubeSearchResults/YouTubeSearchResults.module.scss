@@ -25,8 +25,13 @@
   font-size: 0.9em;
 }
 
-.subtitles {
-  color: #176b31;
+.captions {
+  align-self: flex-start;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: #176b31;
+  color: white;
+  font-weight: 600;
   font-size: 0.85em;
 }
 

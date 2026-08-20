@@ -19,10 +19,7 @@ const youtubeSearchResultsQuery = graphql`
         thumbnailUrl
         duration
         downloaded
-        captionLanguages {
-          code
-          name
-        }
+        hasCaptions
       }
     }
   }
@@ -75,11 +72,8 @@ const YouTubeSearchResults = ({ query }: Props) => {
                 {video.duration && (
                   <span className={styles.duration}>{video.duration}</span>
                 )}
-                {video.captionLanguages.length > 0 && (
-                  <span className={styles.subtitles}>
-                    Subtitles:{" "}
-                    {video.captionLanguages.map(({ name }) => name).join(", ")}
-                  </span>
+                {video.hasCaptions && (
+                  <span className={styles.captions}>Subtitle available</span>
                 )}
               </div>
             </div>

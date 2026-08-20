@@ -406,7 +406,7 @@ type YoutubeSearchResponse {
 type YoutubeSearchResult {
   videoId: String!
   downloaded: Boolean!
-  captionLanguages: [CaptionLanguage!]!
+  hasCaptions: Boolean!
   title: String!
   author: String!
   thumbnailUrl: String

@@ -21,6 +21,7 @@ import {
 } from "./joysoundMediaMetadata";
 import { getWebDataDirectory, isElectronRuntime } from "./runtimePaths";
 import { SharedDownloadCoordinator } from "./sharedDownloadCore";
+import { getNiconicoYtDlpDownloadArgs } from "./niconicoYtDlpArgs";
 import { getYoutubeYtDlpArgs } from "./youtubeYtDlpArgs";
 import { isValidYoutubeCaptionCode } from "./youtubeCaptionCode";
 import {
@@ -1429,14 +1430,7 @@ function downloadNicoVideoImpl(
 
   const ytdlp = spawn(
     resourcePaths.ytdlp,
-    [
-      "-N",
-      "4",
-      "-o",
-      `${videoFilename}`,
-      "--",
-      `https://www.nicovideo.jp/watch/${videoId}`,
-    ],
+    getNiconicoYtDlpDownloadArgs(videoId, videoFilename, resourcePaths.ffmpeg),
     {
       env,
       stdio: ["ignore", "pipe", "pipe"],

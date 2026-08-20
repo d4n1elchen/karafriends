@@ -11,12 +11,12 @@ import { withLoader } from "../components/Loader";
 import SearchFormWrapper from "../components/SearchFormWrapper";
 import YouTubeInfo from "../components/YouTubeInfo";
 import YouTubeSearchResults from "../components/YouTubeSearchResults";
-import * as styles from "./YouTubePage.module.scss";
+import * as styles from "./VideoSearchPage.module.scss";
 import {
-  buildYoutubeSearchQuery,
-  parseYoutubeKaraokeKeyword,
-  YoutubeKaraokeKeyword,
-} from "../../common/youtubeKaraokeSearch";
+  buildKaraokeSearchQuery,
+  KaraokeKeyword,
+  parseKaraokeKeyword,
+} from "../../common/karaokeSearch";
 
 import { useNowPlayingQuery$data } from "../hooks/__generated__/useNowPlayingQuery.graphql";
 
@@ -62,11 +62,10 @@ type YouTubeParams = {
 
 const KARAOKE_KEYWORD_STORAGE_KEY = "youtubeKaraokeKeyword";
 
-function storedKaraokeKeyword(): YoutubeKaraokeKeyword {
+function storedKaraokeKeyword(): KaraokeKeyword {
   return (
-    parseYoutubeKaraokeKeyword(
-      localStorage.getItem(KARAOKE_KEYWORD_STORAGE_KEY),
-    ) || "none"
+    parseKaraokeKeyword(localStorage.getItem(KARAOKE_KEYWORD_STORAGE_KEY)) ||
+    "none"
   );
 }
 
@@ -81,16 +80,12 @@ const YouTubePage = () => {
 
   const [videoId, setVideoId] = useState<string>(params.videoId || "");
   const [query, setQuery] = useState<string>(searchParams.get("query") || "");
-  const [karaokeKeyword, setKaraokeKeyword] = useState<YoutubeKaraokeKeyword>(
-    () => {
-      if (searchParams.has("query")) {
-        return (
-          parseYoutubeKaraokeKeyword(searchParams.get("karaoke")) || "none"
-        );
-      }
-      return storedKaraokeKeyword();
-    },
-  );
+  const [karaokeKeyword, setKaraokeKeyword] = useState<KaraokeKeyword>(() => {
+    if (searchParams.has("query")) {
+      return parseKaraokeKeyword(searchParams.get("karaoke")) || "none";
+    }
+    return storedKaraokeKeyword();
+  });
 
   useEffect(() => {
     const routeVideoId = params.videoId || "";
@@ -98,13 +93,13 @@ const YouTubePage = () => {
     setQuery(routeVideoId ? "" : searchParams.get("query") || "");
     setKaraokeKeyword(
       searchParams.has("query")
-        ? parseYoutubeKaraokeKeyword(searchParams.get("karaoke")) || "none"
+        ? parseKaraokeKeyword(searchParams.get("karaoke")) || "none"
         : storedKaraokeKeyword(),
     );
   }, [params.videoId, searchParams]);
 
   const onKaraokeKeywordChanged = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const nextKeyword = parseYoutubeKaraokeKeyword(e.target.value) || "none";
+    const nextKeyword = parseKaraokeKeyword(e.target.value) || "none";
     setKaraokeKeyword(nextKeyword);
     localStorage.setItem(KARAOKE_KEYWORD_STORAGE_KEY, nextKeyword);
   };
@@ -168,9 +163,9 @@ const YouTubePage = () => {
       </form>
       {query !== "" && (
         <YouTubeSearchResults
-          query={buildYoutubeSearchQuery(
+          query={buildKaraokeSearchQuery(
             query,
-            parseYoutubeKaraokeKeyword(searchParams.get("karaoke")) || "none",
+            parseKaraokeKeyword(searchParams.get("karaoke")) || "none",
           )}
         />
       )}

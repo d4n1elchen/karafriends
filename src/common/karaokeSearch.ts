@@ -1,7 +1,7 @@
-export type YoutubeKaraokeKeyword = "none" | "jp" | "en" | "zh";
+export type KaraokeKeyword = "none" | "jp" | "en" | "zh";
 
-export const YOUTUBE_KARAOKE_KEYWORDS: Record<
-  Exclude<YoutubeKaraokeKeyword, "none">,
+export const KARAOKE_KEYWORDS: Record<
+  Exclude<KaraokeKeyword, "none">,
   string
 > = {
   jp: "カラオケ",
@@ -9,22 +9,22 @@ export const YOUTUBE_KARAOKE_KEYWORDS: Record<
   zh: "卡拉OK",
 };
 
-export function parseYoutubeKaraokeKeyword(
+export function parseKaraokeKeyword(
   value: string | null,
-): YoutubeKaraokeKeyword | null {
+): KaraokeKeyword | null {
   return value === "none" || value === "jp" || value === "en" || value === "zh"
     ? value
     : null;
 }
 
-export function buildYoutubeSearchQuery(
+export function buildKaraokeSearchQuery(
   query: string,
-  mode: YoutubeKaraokeKeyword,
+  mode: KaraokeKeyword,
 ): string {
   const trimmedQuery = query.trim();
   if (!trimmedQuery || mode === "none") return trimmedQuery;
 
-  const keyword = YOUTUBE_KARAOKE_KEYWORDS[mode];
+  const keyword = KARAOKE_KEYWORDS[mode];
   if (trimmedQuery.toLocaleLowerCase().includes(keyword.toLocaleLowerCase())) {
     return trimmedQuery;
   }

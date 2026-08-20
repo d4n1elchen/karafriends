@@ -38,6 +38,12 @@ import { NiconicoSearchResult, searchNiconico } from "../common/niconicoSearch";
 import { normalizeRoomId } from "../common/roomIdCore";
 import { getYoutubeMetadataWithYtDlp } from "../common/youtubeMetadata";
 import {
+  extractDownloadableYoutubeCaptionLanguages,
+  isDownloadableYoutubeCaptionCode,
+  YoutubeCaptionLanguage,
+} from "../common/youtubeCaptionLanguages";
+import { youtubeSearchResultHasCaptions } from "../common/youtubeSearchCore";
+import {
   downloadDamVideo,
   downloadJoysoundData,
   downloadNicoVideo,
@@ -152,11 +158,90 @@ interface YoutubeSearchResult {
   readonly author: string;
   readonly thumbnailUrl: string | null;
   readonly duration: string | null;
+  readonly hasCaptions: boolean;
 }
 
 interface YoutubeSearchResponse {
   readonly results: YoutubeSearchResult[];
   readonly error: string | null;
+}
+
+const YOUTUBE_CAPTION_CACHE_MS = 10 * 60 * 1000;
+const YOUTUBE_CAPTION_CACHE_LIMIT = 500;
+const YOUTUBE_CAPTION_LOOKUP_CONCURRENCY = 4;
+const youtubeCaptionCache = new Map<
+  string,
+  { expiresAt: number; value: Promise<YoutubeCaptionLanguage[]> }
+>();
+const youtubeCaptionLookupWaiters: Array<() => void> = [];
+let youtubeCaptionLookupsActive = 0;
+
+async function withYoutubeCaptionLookupSlot<T>(
+  lookup: () => Promise<T>,
+): Promise<T> {
+  if (youtubeCaptionLookupsActive >= YOUTUBE_CAPTION_LOOKUP_CONCURRENCY) {
+    await new Promise<void>((resolve) =>
+      youtubeCaptionLookupWaiters.push(resolve),
+    );
+  }
+
+  youtubeCaptionLookupsActive += 1;
+  try {
+    return await lookup();
+  } finally {
+    youtubeCaptionLookupsActive -= 1;
+    youtubeCaptionLookupWaiters.shift()?.();
+  }
+}
+
+function getYoutubeCaptionLanguagesCached(
+  youtube: Innertube,
+  videoId: string,
+  hasCaptions: boolean,
+): Promise<YoutubeCaptionLanguage[]> {
+  if (!hasCaptions) return Promise.resolve([]);
+
+  const now = Date.now();
+  const cached = youtubeCaptionCache.get(videoId);
+  if (cached && cached.expiresAt > now) return cached.value;
+
+  if (youtubeCaptionCache.size >= YOUTUBE_CAPTION_CACHE_LIMIT) {
+    const oldestKey = youtubeCaptionCache.keys().next().value;
+    if (oldestKey) youtubeCaptionCache.delete(oldestKey);
+  }
+
+  const value = withYoutubeCaptionLookupSlot(async () => {
+    try {
+      const data: any = await youtube.getBasicInfo(videoId);
+      const captionLanguages = extractDownloadableYoutubeCaptionLanguages(data);
+      if (captionLanguages.length > 0) return captionLanguages;
+    } catch (error) {
+      debugError(
+        "youtube",
+        `YouTube.js could not load subtitle languages for ${videoId}; trying yt-dlp`,
+        error,
+      );
+    }
+
+    try {
+      const metadata = await getYoutubeMetadataWithYtDlp(videoId);
+      return metadata.captionLanguages.filter(({ code }) =>
+        isDownloadableYoutubeCaptionCode(code),
+      );
+    } catch (error) {
+      debugError(
+        "youtube",
+        `Could not load subtitle languages for ${videoId}`,
+        error,
+      );
+      return [];
+    }
+  });
+  youtubeCaptionCache.set(videoId, {
+    expiresAt: now + YOUTUBE_CAPTION_CACHE_MS,
+    value,
+  });
+  return value;
 }
 
 interface NicoVideoInfo extends VideoInfo {
@@ -562,6 +647,17 @@ const resolvers = {
     downloaded(parent: { videoId: string }) {
       return isAnyMediaDownloaded("YOUTUBE", parent.videoId);
     },
+    captionLanguages(
+      parent: YoutubeSearchResult,
+      _: any,
+      { dataSources }: IGraphQLContext,
+    ) {
+      return getYoutubeCaptionLanguagesCached(
+        dataSources.youtube,
+        parent.videoId,
+        parent.hasCaptions,
+      );
+    },
   },
 
   NiconicoSearchResult: {
@@ -888,13 +984,8 @@ const resolvers = {
         // shifts between versions, so treat it as untyped here.
         const data: any = await dataSources.youtube.getBasicInfo(args.videoId);
         if (data.playability_status?.status === "OK") {
-          const captionTracks = data.captions?.caption_tracks || [];
-          const captionLanguages: CaptionLanguage[] = captionTracks
-            .filter((captionTrack: any) => !captionTrack.vss_id.startsWith("a"))
-            .map((captionTrack: any) => ({
-              code: captionTrack.language_code,
-              name: captionTrack.name.text ?? "",
-            }));
+          const captionLanguages =
+            extractDownloadableYoutubeCaptionLanguages(data);
 
           const loudnessDb =
             data.player_config?.audio_config?.loudness_db || 0.0;
@@ -975,6 +1066,7 @@ const resolvers = {
               result.thumbnails?.[result.thumbnails.length - 1]?.url ??
               null,
             duration: result.length_text?.text ?? result.duration?.text ?? null,
+            hasCaptions: youtubeSearchResultHasCaptions(result),
           }));
 
         return { results, error: null };

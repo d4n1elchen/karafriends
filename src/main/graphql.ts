@@ -339,17 +339,19 @@ export interface RoomRuntime {
   db: RoomDatabase;
   dbPath: string;
   pubsub: PubSub;
+  remoteToken: string;
 }
 
 function publishMediaDownloadCompleted(
-  room: RoomRuntime,
   source: "DAM" | "JOYSOUND" | "YOUTUBE" | "NICONICO",
   songId: string,
   suffix: string | null = null,
 ): void {
-  room.pubsub.publish(SubscriptionEvent.MediaDownloadCompleted, {
-    mediaDownloadCompleted: { source, songId, suffix },
-  });
+  for (const room of rooms.values()) {
+    room.pubsub.publish(SubscriptionEvent.MediaDownloadCompleted, {
+      mediaDownloadCompleted: { source, songId, suffix },
+    });
+  }
 }
 
 function defaultDatabase(): RoomDatabase {
@@ -366,11 +368,22 @@ function defaultDatabase(): RoomDatabase {
 }
 
 const rooms = new Map<string, RoomRuntime>();
+const MAX_ACTIVE_ROOMS = 100;
+
+export function getExistingRoom(roomIdValue: unknown): RoomRuntime | null {
+  return rooms.get(normalizeRoomId(roomIdValue)) || null;
+}
 
 export function getRoom(roomIdValue: unknown): RoomRuntime {
   const id = normalizeRoomId(roomIdValue);
   const existing = rooms.get(id);
   if (existing) return existing;
+
+  if (rooms.size >= MAX_ACTIVE_ROOMS) {
+    throw new Error(
+      `Maximum active room limit (${MAX_ACTIVE_ROOMS}) reached; restart the server to clear inactive rooms`,
+    );
+  }
 
   const dbPath =
     id === "main"
@@ -381,6 +394,7 @@ export function getRoom(roomIdValue: unknown): RoomRuntime {
     db: loadDb(dbPath),
     dbPath,
     pubsub: new PubSub(),
+    remoteToken: randomBytes(32).toString("base64url"),
   };
   rooms.set(id, room);
   return room;
@@ -1117,7 +1131,6 @@ const resolvers = {
             completedPushToHead,
           );
           publishMediaDownloadCompleted(
-            room,
             "JOYSOUND",
             completedItem.songId,
             completedItem.youtubeVideoId,
@@ -1170,7 +1183,6 @@ const resolvers = {
             queueItem.streamingUrlIdx,
             () =>
               publishMediaDownloadCompleted(
-                room,
                 "DAM",
                 queueItem.songId,
                 queueItem.streamingUrlIdx,
@@ -1217,7 +1229,7 @@ const resolvers = {
         args.input.captionCode,
         () => {
           const result = pushSongToQueue(room, queueItem, pushToHead);
-          publishMediaDownloadCompleted(room, "YOUTUBE", queueItem.songId);
+          publishMediaDownloadCompleted("YOUTUBE", queueItem.songId);
           return result;
         },
       );
@@ -1258,7 +1270,7 @@ const resolvers = {
         args.input.songId,
         () => {
           const result = pushSongToQueue(room, queueItem, pushToHead);
-          publishMediaDownloadCompleted(room, "NICONICO", queueItem.songId);
+          publishMediaDownloadCompleted("NICONICO", queueItem.songId);
           return result;
         },
       );

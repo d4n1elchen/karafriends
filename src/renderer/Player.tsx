@@ -295,12 +295,11 @@ function Player(props: {
 
                 videoRef.current.src = mediaUrl(`yt-${popSong.songId}.mp4`);
 
-                if (popSong.hasCaptions) {
-                  setYoutubeCaptionUrl(mediaUrl(`yt-${popSong.songId}.vtt`));
-                  setYoutubeJson3CaptionUrl(
-                    mediaUrl(`yt-${popSong.songId}.json3`),
-                  );
-                  setYoutubeCaptionCode(popSong.captionCode ?? null);
+                if (popSong.hasCaptions && popSong.captionCode) {
+                  const captionPrefix = `yt-${popSong.songId}.${popSong.captionCode}`;
+                  setYoutubeCaptionUrl(mediaUrl(`${captionPrefix}.vtt`));
+                  setYoutubeJson3CaptionUrl(mediaUrl(`${captionPrefix}.json3`));
+                  setYoutubeCaptionCode(popSong.captionCode);
                 }
 
                 console.log(

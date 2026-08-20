@@ -32,12 +32,12 @@ const remoteAccessResponse = await fetch(
 );
 assert.equal(remoteAccessResponse.status, 200);
 const remoteAccess = await remoteAccessResponse.json();
-const remoteToken = new URL(remoteAccess.remoteUrl).searchParams.get(
+const mainRemoteToken = new URL(remoteAccess.remoteUrl).searchParams.get(
   "remoteToken",
 );
-assert.match(remoteToken, /^[A-Za-z0-9_-]{40,}$/);
+assert.match(mainRemoteToken, /^[A-Za-z0-9_-]{40,}$/);
 
-async function graphql(roomId, query) {
+async function graphql(roomId, remoteToken, query) {
   const response = await fetch(graphqlUrl, {
     method: "POST",
     headers: {
@@ -69,18 +69,46 @@ assert.equal(
   new URL(createdRoom.remoteUrl).searchParams.get("room"),
   createdRoom.roomId,
 );
-assert.equal(
-  new URL(createdRoom.remoteUrl).searchParams.get("remoteToken"),
-  remoteToken,
+const roomAToken = new URL(createdRoom.remoteUrl).searchParams.get(
+  "remoteToken",
 );
+assert.match(roomAToken, /^[A-Za-z0-9_-]{40,}$/);
+assert.notEqual(roomAToken, mainRemoteToken);
 
-const roomA = `smoke-a-${Date.now()}`;
-const roomB = `smoke-b-${Date.now()}`;
-await graphql(roomA, "mutation { setPlaybackState(playbackState: PAUSED) }");
-const roomAState = await graphql(roomA, "query { playbackState }");
-const roomBState = await graphql(roomB, "query { playbackState }");
+const secondRoomResponse = await fetch(new URL("/api/rooms", baseUrl), {
+  method: "POST",
+  headers: { cookie: adminCookie },
+});
+assert.equal(secondRoomResponse.status, 201);
+const secondRoom = await secondRoomResponse.json();
+const roomBToken = new URL(secondRoom.remoteUrl).searchParams.get(
+  "remoteToken",
+);
+assert.match(roomBToken, /^[A-Za-z0-9_-]{40,}$/);
+assert.notEqual(roomBToken, roomAToken);
+
+const roomA = createdRoom.roomId;
+const roomB = secondRoom.roomId;
+await graphql(
+  roomA,
+  roomAToken,
+  "mutation { setPlaybackState(playbackState: PAUSED) }",
+);
+const roomAState = await graphql(roomA, roomAToken, "query { playbackState }");
+const roomBState = await graphql(roomB, roomBToken, "query { playbackState }");
 assert.equal(roomAState.playbackState, "PAUSED");
 assert.equal(roomBState.playbackState, "WAITING");
+
+const crossRoomResponse = await fetch(graphqlUrl, {
+  method: "POST",
+  headers: {
+    "content-type": "application/json",
+    "x-karafriends-room": roomB,
+    "x-karafriends-remote-token": roomAToken,
+  },
+  body: JSON.stringify({ query: "query { playbackState }" }),
+});
+assert.equal(crossRoomResponse.status, 401);
 
 const received = [];
 let resolveEvent;
@@ -92,7 +120,7 @@ const eventReceived = new Promise((resolve, reject) => {
 const client = createClient({
   url: websocketUrl.toString(),
   webSocketImpl: WebSocket,
-  connectionParams: { roomId: roomA, remoteToken },
+  connectionParams: { roomId: roomA, remoteToken: roomAToken },
 });
 const disposeSubscription = client.subscribe(
   { query: "subscription { playbackStateChanged }" },
@@ -107,12 +135,17 @@ const disposeSubscription = client.subscribe(
 );
 
 await new Promise((resolve) => setTimeout(resolve, 250));
-await graphql(roomB, "mutation { setPlaybackState(playbackState: PLAYING) }");
+await graphql(
+  roomB,
+  roomBToken,
+  "mutation { setPlaybackState(playbackState: PLAYING) }",
+);
 await new Promise((resolve) => setTimeout(resolve, 250));
 assert.deepEqual(received, [], "room B event leaked into room A subscription");
 
 await graphql(
   roomA,
+  roomAToken,
   "mutation { setPlaybackState(playbackState: RESTARTING) }",
 );
 const event = await Promise.race([

@@ -20,6 +20,7 @@ import {
   getJoysoundTelopDuration,
 } from "./joysoundMediaMetadata";
 import { getWebDataDirectory, isElectronRuntime } from "./runtimePaths";
+import { SharedDownloadCoordinator } from "./sharedDownloadCore";
 import { getYoutubeYtDlpArgs } from "./youtubeYtDlpArgs";
 import { isValidYoutubeCaptionCode } from "./youtubeCaptionCode";
 import {
@@ -147,7 +148,12 @@ function deleteTempFiles(prefix: string): void {
     return;
   }
   for (const filename of filenames) {
-    if (filename && filename.includes(prefix)) {
+    if (
+      filename &&
+      (filename === prefix ||
+        filename.startsWith(`${prefix}.`) ||
+        filename.startsWith(`${prefix}-`))
+    ) {
       // NB: readdirSync returns bare names; they must be joined with
       // TEMP_FOLDER or the unlink targets the wrong (cwd-relative) path.
       safeUnlink(path.join(TEMP_FOLDER, filename));
@@ -183,27 +189,6 @@ function handleYoutubeDownloadLog(
   }
 }
 
-function isVideoCurrentlyDownloading(
-  filename: string,
-  downloadQueue: DownloadQueueItem[],
-  downloadType: number,
-  songId: string,
-  suffix: string | null = null,
-): boolean {
-  if (!fs.existsSync(filename)) {
-    return false;
-  }
-
-  const prevDownloadQueueItem = downloadQueue.find(
-    (item) =>
-      item.downloadType === downloadType &&
-      item.songId === songId &&
-      item.suffix === suffix,
-  );
-
-  return Boolean(prevDownloadQueueItem);
-}
-
 export function getVideoDownloadProgress(
   downloadQueue: DownloadQueueItem[],
   downloadType: number,
@@ -228,9 +213,43 @@ function removeVideoDownloadFromQueue(
   downloadQueue: DownloadQueueItem[],
   downloadQueueItem: DownloadQueueItem,
 ): void {
+  if (sharedDownloads.has(downloadQueueItem)) return;
+
   const index = downloadQueue.indexOf(downloadQueueItem);
   if (index >= 0) downloadQueue.splice(index, 1);
 }
+
+const sharedDownloads = new SharedDownloadCoordinator<UserIdentity>();
+
+function beginSharedDownload(
+  key: string,
+  downloadQueue: DownloadQueueItem[],
+  downloadType: number,
+  userIdentity: UserIdentity,
+  songId: string,
+  suffix: string | null,
+  onComplete: (result: unknown) => void,
+): { isOwner: boolean; item: DownloadQueueItem } {
+  return sharedDownloads.begin(
+    key,
+    downloadQueue,
+    { downloadType, userIdentity, songId, suffix },
+    onComplete,
+  ) as { isOwner: boolean; item: DownloadQueueItem };
+}
+
+function completeSharedDownload(
+  item: DownloadQueueItem,
+  result?: unknown,
+): void {
+  sharedDownloads.complete(item, result);
+}
+
+function failSharedDownload(item: DownloadQueueItem): void {
+  sharedDownloads.fail(item);
+}
+
+const damDownloadWaiters = new Map<string, Array<() => void>>();
 
 export function downloadDamVideo(
   m3u8Url: string,
@@ -238,11 +257,29 @@ export function downloadDamVideo(
   suffix: string,
   onComplete: () => void,
 ): void {
+  const jobKey = `${songId}:${suffix}`;
+  const existingWaiters = damDownloadWaiters.get(jobKey);
+  if (existingWaiters) {
+    existingWaiters.push(onComplete);
+    return;
+  }
+  damDownloadWaiters.set(jobKey, [onComplete]);
+
+  const completeAll = () => {
+    const waiters = damDownloadWaiters.get(jobKey) || [];
+    damDownloadWaiters.delete(jobKey);
+    for (const waiter of waiters) waiter();
+  };
+  const failAll = () => damDownloadWaiters.delete(jobKey);
+
   ensureExternalResources()
-    .then(() => downloadDamVideoImpl(m3u8Url, songId, suffix, onComplete))
-    .catch((err) =>
-      console.error(`Error preparing external resources: ${err}`),
-    );
+    .then(() =>
+      downloadDamVideoImpl(m3u8Url, songId, suffix, completeAll, failAll),
+    )
+    .catch((err) => {
+      failAll();
+      console.error(`Error preparing external resources: ${err}`);
+    });
 }
 
 function downloadDamVideoImpl(
@@ -250,6 +287,7 @@ function downloadDamVideoImpl(
   songId: string,
   suffix: string,
   onComplete: () => void,
+  onError: () => void,
 ): void {
   if (!fs.existsSync(TEMP_FOLDER)) {
     fs.mkdirSync(TEMP_FOLDER);
@@ -294,13 +332,17 @@ function downloadDamVideoImpl(
   ffmpeg.stderr.pipe(process.stderr);
   ffmpeg.stderr.pipe(ffmpegLogStream);
 
-  handleProcessError(ffmpeg, "ffmpeg (DAM)", () => safeUnlink(tempFilename));
+  handleProcessError(ffmpeg, "ffmpeg (DAM)", () => {
+    safeUnlink(tempFilename);
+    onError();
+  });
 
   ffmpeg.on("exit", (code, signal) => {
     if (code === 0) {
       safeRename(tempFilename, filename);
       onComplete();
     } else {
+      onError();
       console.error(
         `Error downloading DAM video with ID ${songId}: code=${code}, signal=${signal}, log=${ffmpegLogFilename}`,
       );
@@ -440,7 +482,10 @@ function downloadJoysoundYoutubeVideoPromise(
 
     const env = { ...process.env };
     // Don't need a proxy to download from YouTube
-    delete process.env.http_proxy;
+    delete env.http_proxy;
+    delete env.HTTP_PROXY;
+    delete env.https_proxy;
+    delete env.HTTPS_PROXY;
 
     const ytdlp = spawn(
       resourcePaths.ytdlp,
@@ -612,12 +657,7 @@ function padJoysoundVideoPromise(
   data: JoysoundVideoData,
   videoFilename: string,
   ffmpegLogFilename: string,
-  queueItem: JoysoundQueueItem,
-  pushToHead: boolean,
-  pushSongToQueue: (
-    queueItem: JoysoundQueueItem,
-    pushToHead: boolean,
-  ) => QueueSongResult,
+  onComplete: () => void,
 ): Promise<number> {
   const videoBaseFilename = videoFilename.substr(0, videoFilename.length - 4);
 
@@ -810,7 +850,7 @@ function padJoysoundVideoPromise(
             safeUnlink(videoTempFilename);
             safeUnlink(videoConcatFilename);
 
-            pushSongToQueue(queueItem, pushToHead);
+            onComplete();
 
             resolve(code);
           } else {
@@ -845,32 +885,40 @@ export function downloadJoysoundData(
     pushToHead: boolean,
   ) => QueueSongResult,
 ): void {
+  const videoFilenameSuffix = queueItem.youtubeVideoId || "default";
+  const { isOwner, item: downloadQueueItem } = beginSharedDownload(
+    `joysound:${queueItem.songId}:${videoFilenameSuffix}`,
+    downloadQueue,
+    0,
+    userIdentity,
+    queueItem.songId,
+    queueItem.youtubeVideoId,
+    (playtime) =>
+      pushSongToQueue(
+        {
+          ...queueItem,
+          playtime:
+            typeof playtime === "number" ? playtime : queueItem.playtime,
+        },
+        pushToHead,
+      ),
+  );
+  if (!isOwner) return;
+
   ensureExternalResources()
     .then(() =>
-      downloadJoysoundDataImpl(
-        downloadQueue,
-        userIdentity,
-        joysoundApi,
-        queueItem,
-        pushToHead,
-        pushSongToQueue,
-      ),
+      downloadJoysoundDataImpl(joysoundApi, queueItem, downloadQueueItem),
     )
-    .catch((err) =>
-      console.error(`Error preparing external resources: ${err}`),
-    );
+    .catch((err) => {
+      console.error(`Error preparing external resources: ${err}`);
+      failSharedDownload(downloadQueueItem);
+    });
 }
 
 function downloadJoysoundDataImpl(
-  downloadQueue: DownloadQueueItem[],
-  userIdentity: UserIdentity,
   joysoundApi: JoysoundAPI,
   queueItem: JoysoundQueueItem,
-  pushToHead: boolean,
-  pushSongToQueue: (
-    queueItem: JoysoundQueueItem,
-    pushToHead: boolean,
-  ) => QueueSongResult,
+  downloadQueueItem: DownloadQueueItem,
 ): void {
   if (!fs.existsSync(TEMP_FOLDER)) {
     fs.mkdirSync(TEMP_FOLDER);
@@ -897,12 +945,10 @@ function downloadJoysoundDataImpl(
     if (fs.existsSync(telopFilename)) {
       try {
         const telopBuffer = fs.readFileSync(telopFilename);
-        queueItem = {
-          ...queueItem,
-          playtime: getJoysoundTelopDuration(telopBuffer),
-        };
-
-        pushSongToQueue(queueItem, pushToHead);
+        completeSharedDownload(
+          downloadQueueItem,
+          getJoysoundTelopDuration(telopBuffer),
+        );
         return;
       } catch (error) {
         console.error(
@@ -921,35 +967,13 @@ function downloadJoysoundDataImpl(
     }
   }
 
-  if (
-    isVideoCurrentlyDownloading(
-      tempFilename,
-      downloadQueue,
-      0,
-      songId,
-      queueItem.youtubeVideoId,
-    )
-  ) {
-    console.error(`${videoFilename} was already queued, not redownloading`);
-
-    return;
-  } else if (fs.existsSync(tempFilename)) {
+  if (fs.existsSync(tempFilename)) {
     console.error(`${tempFilename} exists but was not in the download queue.`);
 
-    deleteTempFiles(filenamePrefix);
+    deleteTempFiles(path.basename(videoFilename, ".mp4"));
   }
 
   fs.closeSync(fs.openSync(tempFilename, "w"));
-
-  const downloadQueueItem: DownloadQueueItem = {
-    downloadType: 0,
-    userIdentity,
-    songId,
-    suffix: queueItem.youtubeVideoId,
-    progress: 0.0,
-  };
-
-  downloadQueue.push(downloadQueueItem);
 
   const songDataPromise = joysoundApi.getSongRawData(songId);
   let videoDataPromise;
@@ -958,7 +982,7 @@ function downloadJoysoundDataImpl(
     videoDataPromise = downloadJoysoundYoutubeVideoPromise(
       songId,
       queueItem.youtubeVideoId,
-      downloadQueue,
+      [],
       downloadQueueItem,
       tempFilename,
     );
@@ -969,7 +993,7 @@ function downloadJoysoundDataImpl(
       return downloadJoysoundVideoPromise(
         songId,
         videoUrl,
-        downloadQueue,
+        [],
         downloadQueueItem,
         tempFilename,
         ffmpegLogFilename,
@@ -1015,10 +1039,7 @@ function downloadJoysoundDataImpl(
       );
     })
     .then((data) => {
-      queueItem = {
-        ...queueItem,
-        playtime: Math.floor(data.songPlaytime / 1000),
-      };
+      const playtime = Math.floor(data.songPlaytime / 1000);
 
       if (
         queueItem.youtubeVideoId &&
@@ -1028,12 +1049,10 @@ function downloadJoysoundDataImpl(
           data,
           videoFilename,
           ffmpegLogFilename,
-          queueItem,
-          pushToHead,
-          pushSongToQueue,
+          () => completeSharedDownload(downloadQueueItem, playtime),
         );
       } else {
-        pushSongToQueue(queueItem, pushToHead);
+        completeSharedDownload(downloadQueueItem, playtime);
       }
     })
     .catch((err) => {
@@ -1042,34 +1061,14 @@ function downloadJoysoundDataImpl(
       // launch failure, bad telop/ogg data, etc. — would otherwise reach the
       // process-level handler and crash the app. Fail just this download.
       console.error(`Error downloading Joysound video with ID ${songId}:`, err);
-      removeVideoDownloadFromQueue(downloadQueue, downloadQueueItem);
-      deleteTempFiles(filenamePrefix);
+      failSharedDownload(downloadQueueItem);
+      deleteTempFiles(path.basename(videoFilename, ".mp4"));
     });
 }
 
-export function downloadYoutubeVideo(
-  downloadQueue: DownloadQueueItem[],
-  userIdentity: UserIdentity,
-  videoId: string,
-  captionCode: string | null,
-  onComplete: () => any,
-): void {
-  ensureExternalResources()
-    .then(() =>
-      downloadYoutubeVideoImpl(
-        downloadQueue,
-        userIdentity,
-        videoId,
-        captionCode,
-        onComplete,
-      ),
-    )
-    .catch((err) =>
-      console.error(`Error preparing external resources: ${err}`),
-    );
-}
+const youtubeCaptionRequests = new Map<string, Set<string>>();
 
-function downloadYoutubeVideoImpl(
+export function downloadYoutubeVideo(
   downloadQueue: DownloadQueueItem[],
   userIdentity: UserIdentity,
   videoId: string,
@@ -1082,7 +1081,39 @@ function downloadYoutubeVideoImpl(
     );
     return;
   }
+  if (captionCode) {
+    const requests = youtubeCaptionRequests.get(videoId) || new Set<string>();
+    requests.add(captionCode);
+    youtubeCaptionRequests.set(videoId, requests);
+  }
 
+  const { isOwner, item: downloadQueueItem } = beginSharedDownload(
+    `youtube:${videoId}`,
+    downloadQueue,
+    1,
+    userIdentity,
+    videoId,
+    null,
+    () => onComplete(),
+  );
+  if (!isOwner) return;
+
+  ensureExternalResources()
+    .then(() =>
+      downloadYoutubeVideoImpl(videoId, captionCode, downloadQueueItem),
+    )
+    .catch((err) => {
+      console.error(`Error preparing external resources: ${err}`);
+      youtubeCaptionRequests.delete(videoId);
+      failSharedDownload(downloadQueueItem);
+    });
+}
+
+function downloadYoutubeVideoImpl(
+  videoId: string,
+  captionCode: string | null,
+  downloadQueueItem: DownloadQueueItem,
+): void {
   if (!fs.existsSync(TEMP_FOLDER)) {
     fs.mkdirSync(TEMP_FOLDER);
   }
@@ -1091,33 +1122,17 @@ function downloadYoutubeVideoImpl(
   const writeBasePath = `${TEMP_FOLDER}/${filenamePrefix}`;
 
   const videoFilename = `${writeBasePath}.mp4`;
-  const vttFilename = `${writeBasePath}.vtt`;
-  const json3Filename = `${writeBasePath}.json3`;
   const ytdlpLogFilename = `${writeBasePath}.log`;
 
   const tempFilename = `${videoFilename}.tmp`;
 
-  if (isVideoCurrentlyDownloading(tempFilename, downloadQueue, 1, videoId)) {
-    console.error(`${videoFilename} was already queued, not redownloading`);
-
-    return;
-  } else if (fs.existsSync(tempFilename)) {
+  if (fs.existsSync(tempFilename)) {
     console.error(`${tempFilename} exists but was not in the download queue.`);
 
     deleteTempFiles(filenamePrefix);
   }
 
   fs.closeSync(fs.openSync(tempFilename, "w"));
-
-  const downloadQueueItem: DownloadQueueItem = {
-    downloadType: 1,
-    userIdentity,
-    songId: videoId,
-    suffix: null,
-    progress: 0.0,
-  };
-
-  downloadQueue.push(downloadQueueItem);
 
   console.info(`Downloading YouTube video to ${videoFilename}`);
 
@@ -1130,7 +1145,8 @@ function downloadYoutubeVideoImpl(
     : [];
 
   const failDownload = (code: number | null, signal: NodeJS.Signals | null) => {
-    removeVideoDownloadFromQueue(downloadQueue, downloadQueueItem);
+    youtubeCaptionRequests.delete(videoId);
+    failSharedDownload(downloadQueueItem);
     safeUnlink(tempFilename);
     console.error(
       `Error downloading Youtube Video with ID ${videoId}: code=${code}, signal=${signal}, log=${ytdlpLogFilename}`,
@@ -1138,20 +1154,9 @@ function downloadYoutubeVideoImpl(
   };
 
   const finishDownload = () => {
-    removeVideoDownloadFromQueue(downloadQueue, downloadQueueItem);
     safeUnlink(tempFilename);
-
-    if (captionCode) {
-      try {
-        fs.renameSync(`${writeBasePath}.${captionCode}.vtt`, vttFilename);
-      } catch (fsError) {
-        console.error(
-          `Error trying to rename caption file ${writeBasePath}.${captionCode}.vtt to ${writeBasePath}.vtt: ${fsError}`,
-        );
-      }
-    }
-
-    onComplete();
+    youtubeCaptionRequests.delete(videoId);
+    completeSharedDownload(downloadQueueItem);
   };
 
   const downloadJson3Captions = (
@@ -1163,6 +1168,7 @@ function downloadYoutubeVideoImpl(
       return;
     }
 
+    const json3Filename = `${writeBasePath}.${captionCode}.json3`;
     console.info(`Downloading JSON3 YouTube captions to ${json3Filename}`);
     let finished = false;
     const finishOnce = (code: number | null, signal: NodeJS.Signals | null) => {
@@ -1212,6 +1218,78 @@ function downloadYoutubeVideoImpl(
     ytdlp.on("exit", finishOnce);
   };
 
+  const downloadCaptionFormat = (
+    code: string,
+    format: "vtt" | "json3",
+    playerClient?: string,
+  ): Promise<void> =>
+    new Promise((resolve) => {
+      const outputFilename = `${writeBasePath}.${code}.${format}`;
+      if (fs.existsSync(outputFilename)) {
+        resolve();
+        return;
+      }
+
+      const outputTemplate = `${writeBasePath}.caption`;
+      let finished = false;
+      const finishOnce = (exitCode: number | null) => {
+        if (finished) return;
+        finished = true;
+        const generatedFilename = `${outputTemplate}.${code}.${format}`;
+        if (exitCode === 0) safeRename(generatedFilename, outputFilename);
+        else {
+          console.warn(
+            `Unable to download optional ${format} captions for ${videoId} (${code})`,
+          );
+          safeUnlink(generatedFilename);
+        }
+        resolve();
+      };
+
+      const captionProcess = spawn(
+        resourcePaths.ytdlp,
+        [
+          ...getYoutubeYtDlpArgs(playerClient),
+          "--write-subs",
+          "--sub-langs",
+          code,
+          "--sub-format",
+          format,
+          "--skip-download",
+          "-o",
+          outputTemplate,
+          "--",
+          videoId,
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+      invariant(captionProcess.stdout);
+      invariant(captionProcess.stderr);
+      captionProcess.stdout.pipe(process.stdout);
+      captionProcess.stdout.pipe(ytdlpLogStream, { end: false });
+      captionProcess.stderr.pipe(process.stderr);
+      captionProcess.stderr.pipe(ytdlpLogStream, { end: false });
+      handleProcessError(captionProcess, `yt-dlp (${format} captions)`, () =>
+        finishOnce(null),
+      );
+      captionProcess.on("exit", (exitCode) => finishOnce(exitCode));
+    });
+
+  const downloadAllRequestedCaptions = async (playerClient?: string) => {
+    const attempted = new Set<string>();
+    while (true) {
+      const requests = youtubeCaptionRequests.get(videoId);
+      const nextCode = requests
+        ? [...requests].find((code) => !attempted.has(code))
+        : undefined;
+      if (!nextCode) return;
+
+      attempted.add(nextCode);
+      await downloadCaptionFormat(nextCode, "vtt", playerClient);
+      await downloadCaptionFormat(nextCode, "json3", playerClient);
+    }
+  };
+
   const runYtDlp = (useProgressiveFallback: boolean, playerClient?: string) => {
     const formatArgs = useProgressiveFallback
       ? ["-f", "18/b[height<=720][ext=mp4]/b[height<=720]"]
@@ -1253,8 +1331,10 @@ function downloadYoutubeVideoImpl(
     ytdlp.on("exit", (code, signal) => {
       if (code === 0) {
         downloadJson3Captions(playerClient, () => {
-          ytdlpLogStream.end();
-          finishDownload();
+          void downloadAllRequestedCaptions(playerClient).finally(() => {
+            ytdlpLogStream.end();
+            finishDownload();
+          });
         });
         return;
       }
@@ -1291,20 +1371,28 @@ export function downloadNicoVideo(
   videoId: string,
   onComplete: () => any,
 ): void {
+  const { isOwner, item: downloadQueueItem } = beginSharedDownload(
+    `niconico:${videoId}`,
+    downloadQueue,
+    2,
+    userIdentity,
+    videoId,
+    null,
+    () => onComplete(),
+  );
+  if (!isOwner) return;
+
   ensureExternalResources()
-    .then(() =>
-      downloadNicoVideoImpl(downloadQueue, userIdentity, videoId, onComplete),
-    )
-    .catch((err) =>
-      console.error(`Error preparing external resources: ${err}`),
-    );
+    .then(() => downloadNicoVideoImpl(videoId, downloadQueueItem))
+    .catch((err) => {
+      console.error(`Error preparing external resources: ${err}`);
+      failSharedDownload(downloadQueueItem);
+    });
 }
 
 function downloadNicoVideoImpl(
-  downloadQueue: DownloadQueueItem[],
-  userIdentity: UserIdentity,
   videoId: string,
-  onComplete: () => any,
+  downloadQueueItem: DownloadQueueItem,
 ): void {
   if (!fs.existsSync(TEMP_FOLDER)) {
     fs.mkdirSync(TEMP_FOLDER);
@@ -1318,27 +1406,13 @@ function downloadNicoVideoImpl(
 
   const tempFilename = `${videoFilename}.tmp`;
 
-  if (isVideoCurrentlyDownloading(tempFilename, downloadQueue, 2, videoId)) {
-    console.error(`${videoFilename} was already queued, not redownloading`);
-
-    return;
-  } else if (fs.existsSync(tempFilename)) {
+  if (fs.existsSync(tempFilename)) {
     console.error(`${tempFilename} exists but was not in the download queue.`);
 
     deleteTempFiles(filenamePrefix);
   }
 
   fs.closeSync(fs.openSync(tempFilename, "w"));
-
-  const downloadQueueItem: DownloadQueueItem = {
-    downloadType: 2,
-    userIdentity,
-    songId: videoId,
-    suffix: null,
-    progress: 0.0,
-  };
-
-  downloadQueue.push(downloadQueueItem);
 
   console.info(`Downloading Niconico video to ${videoFilename}`);
 
@@ -1348,7 +1422,10 @@ function downloadNicoVideoImpl(
 
   const env = { ...process.env };
   // Don't need a proxy to download from Niconico
-  delete process.env.http_proxy;
+  delete env.http_proxy;
+  delete env.HTTP_PROXY;
+  delete env.https_proxy;
+  delete env.HTTPS_PROXY;
 
   const ytdlp = spawn(
     resourcePaths.ytdlp,
@@ -1379,18 +1456,17 @@ function downloadNicoVideoImpl(
   });
 
   handleProcessError(ytdlp, "yt-dlp", () => {
-    removeVideoDownloadFromQueue(downloadQueue, downloadQueueItem);
+    failSharedDownload(downloadQueueItem);
     safeUnlink(tempFilename);
   });
 
   ytdlp.on("exit", (code, signal) => {
-    removeVideoDownloadFromQueue(downloadQueue, downloadQueueItem);
-
     safeUnlink(tempFilename);
 
     if (code === 0) {
-      onComplete();
+      completeSharedDownload(downloadQueueItem);
     } else {
+      failSharedDownload(downloadQueueItem);
       console.error(
         `Error downloading Niconico Video with ID ${videoId}: code=${code}, signal=${signal}, log=${ytdlpLogFilename}`,
       );

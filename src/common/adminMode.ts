@@ -2,7 +2,7 @@ import {
   REMOCON_ADMIN_LOGIN_PATH,
   REMOCON_ADMIN_TOKEN_HEADER,
 } from "./adminAuthCore";
-import { getRemoteAccessToken } from "./roomId";
+import { getRemoteAccessToken, getRoomId } from "./roomId";
 
 const ADMIN_TOKEN_STORAGE_KEY = "karafriends.adminToken";
 
@@ -20,6 +20,7 @@ export async function enableAdminMode(password: string): Promise<void> {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "X-Karafriends-Room": getRoomId(),
       ...(remoteToken ? { "X-Karafriends-Remote-Token": remoteToken } : {}),
     },
     body: JSON.stringify({ password }),

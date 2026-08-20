@@ -11,7 +11,11 @@ import { debugLog, isDebugEnabled } from "../common/debug";
 import { ensureExternalResources } from "../common/externalResources";
 import { normalizeRoomId } from "../common/roomIdCore";
 import { TEMP_FOLDER } from "../common/videoDownloader";
-import { applyGraphQLMiddleware, getRoom } from "../main/graphql";
+import {
+  applyGraphQLMiddleware,
+  getExistingRoom,
+  getRoom,
+} from "../main/graphql";
 import remoconServiceWorkerAllowed from "../main/middleware/remoconServiceWorkerAllowed";
 import {
   ADMIN_SESSION_COOKIE,
@@ -29,7 +33,6 @@ const webRoot = process.env.KARAFRIENDS_WEB_ROOT
   ? path.resolve(process.env.KARAFRIENDS_WEB_ROOT)
   : path.resolve(process.cwd(), "build", "web");
 const adminSessionToken = randomBytes(32).toString("base64url");
-const remoteAccessToken = randomBytes(32).toString("base64url");
 
 if (!karafriendsConfig.adminPassword) {
   throw new Error(
@@ -75,8 +78,9 @@ function hasAdminSession(cookieHeader: unknown): boolean {
   );
 }
 
-function hasRemoteAccess(token: unknown): boolean {
-  return secureEqual(token, remoteAccessToken);
+function hasRemoteAccess(token: unknown, roomId: unknown): boolean {
+  const room = getExistingRoom(roomId);
+  return room ? secureEqual(token, room.remoteToken) : false;
 }
 
 function escapeHtml(value: string): string {
@@ -166,7 +170,10 @@ app.use((req, res, next) => {
 
   if (
     (req.path === "/graphql" || req.path === REMOCON_ADMIN_LOGIN_PATH) &&
-    hasRemoteAccess(req.headers[REMOTE_TOKEN_HEADER])
+    hasRemoteAccess(
+      req.headers[REMOTE_TOKEN_HEADER],
+      req.headers["x-karafriends-room"],
+    )
   ) {
     next();
     return;
@@ -192,10 +199,11 @@ function createRoom(): string {
 }
 
 function remoteUrl(req: express.Request, roomId: string): string {
+  const room = getRoom(roomId);
   const origin = publicUrl || `${req.protocol}://${req.get("host")}`;
   const url = new URL("/remocon/", origin);
-  url.searchParams.set("room", roomId);
-  url.searchParams.set("remoteToken", remoteAccessToken);
+  url.searchParams.set("room", room.id);
+  url.searchParams.set("remoteToken", room.remoteToken);
   return url.toString();
 }
 
@@ -267,7 +275,7 @@ applyGraphQLMiddleware(app, {
   port,
   authorizeWebSocket: (request, connectionParams) =>
     hasAdminSession(request.headers.cookie) ||
-    hasRemoteAccess(connectionParams?.remoteToken),
+    hasRemoteAccess(connectionParams?.remoteToken, connectionParams?.roomId),
   onFatalError: (title, error) => {
     console.error(`${title}:`, error);
     process.exitCode = 1;

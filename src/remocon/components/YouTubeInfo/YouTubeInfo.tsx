@@ -7,6 +7,7 @@ import useUserIdentity from "../../hooks/useUserIdentity";
 import Button from "../Button";
 import { withLoader } from "../Loader";
 import VideoMetadata from "../VideoMetadata";
+import MediaDownloadStatus from "../MediaDownloadStatus";
 import * as styles from "./YouTubeInfo.module.scss";
 import YouTubeLyricsForm from "./YouTubeLyricsForm";
 import YouTubeQueueButton from "./YouTubeQueueButton";
@@ -86,6 +87,7 @@ const YouTubeInfo = ({ videoId }: Props) => {
             onSelectCaption={(language) => setSelectedCaption(language)}
             onAdhocLyricsChanged={(lyrics) => setAdhocSongLyrics(lyrics)}
           />
+          <MediaDownloadStatus source="YOUTUBE" songId={videoId} />
           <YouTubeQueueButton
             videoId={videoId}
             videoInfo={videoData.youtubeVideoInfo}

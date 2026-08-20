@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import useUserIdentity from "../../hooks/useUserIdentity";
 import { JoysoundSongPageQuery$data } from "../../pages/__generated__/JoysoundSongPageQuery.graphql";
 import JoysoundQueueButton from "./JoysoundQueueButton";
+import MediaDownloadStatus from "../MediaDownloadStatus";
 import * as styles from "./JoysoundQueueButtons.module.scss";
 
 interface Props {
@@ -44,6 +45,11 @@ const JoysoundQueueButtons = ({
   } else {
     return (
       <div className={styles.container}>
+        <MediaDownloadStatus
+          source="JOYSOUND"
+          songId={song.id}
+          suffix={validatedYoutubeId}
+        />
         <JoysoundQueueButton
           song={song}
           youtubeVideoId={validatedYoutubeId}

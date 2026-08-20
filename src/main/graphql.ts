@@ -43,6 +43,7 @@ import {
   downloadNicoVideo,
   downloadYoutubeVideo,
   getVideoDownloadProgress,
+  isMediaDownloaded,
   TEMP_FOLDER,
 } from "./../common/videoDownloader";
 import { DkwebsysAPI, MinseiAPI, MinseiCredentialsProvider } from "./damApi";
@@ -1012,6 +1013,14 @@ const resolvers = {
       room.db.pitchShiftSemis,
     playbackState: (_: any, __: any, { room }: IGraphQLContext) =>
       room.db.playbackState,
+    mediaDownloaded: (
+      _: any,
+      args: {
+        source: "DAM" | "JOYSOUND" | "YOUTUBE" | "NICONICO";
+        songId: string;
+        suffix: string | null;
+      },
+    ): boolean => isMediaDownloaded(args.source, args.songId, args.suffix),
     videoDownloadProgress: (
       _: any,
       args: {

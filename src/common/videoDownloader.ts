@@ -21,12 +21,30 @@ import {
 } from "./joysoundMediaMetadata";
 import { getWebDataDirectory, isElectronRuntime } from "./runtimePaths";
 import { getYoutubeYtDlpArgs } from "./youtubeYtDlpArgs";
+import { getMediaCacheRequirements, MediaSource } from "./mediaCacheCore";
 
 export const TEMP_FOLDER: string =
   process.env.KARAFRIENDS_MEDIA_DIR ||
   (isElectronRuntime()
     ? path.join(os.tmpdir(), "karafriends_tmp")
     : path.join(getWebDataDirectory(), "media"));
+
+export function isMediaDownloaded(
+  source: MediaSource,
+  songId: string,
+  suffix: string | null,
+): boolean {
+  const requirements = getMediaCacheRequirements(
+    TEMP_FOLDER,
+    source,
+    songId,
+    suffix,
+  );
+  return (
+    requirements.length > 0 &&
+    requirements.every((filename) => fs.existsSync(filename))
+  );
+}
 const captionCodeRe: RegExp = new RegExp(/^[a-z]{2}$/);
 
 interface JoysoundVideoData {

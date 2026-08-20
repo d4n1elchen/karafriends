@@ -5,6 +5,7 @@ import useUserIdentity from "../../hooks/useUserIdentity";
 import Button from "../Button";
 import { withLoader } from "../Loader";
 import VideoMetadata from "../VideoMetadata";
+import MediaDownloadStatus from "../MediaDownloadStatus";
 import * as styles from "./NiconicoInfo.module.scss";
 import NiconicoQueueButton from "./NiconicoQueueButton";
 import { NiconicoInfoVideoInfoQuery } from "./__generated__/NiconicoInfoVideoInfoQuery.graphql";
@@ -38,7 +39,7 @@ const NiconicoInfo = ({ videoId }: Props) => {
 
   const videoData = useLazyLoadQuery<NiconicoInfoVideoInfoQuery>(
     niconicoInfoVideoInfoQuery,
-    { videoId }
+    { videoId },
   );
 
   return (
@@ -62,6 +63,7 @@ const NiconicoInfo = ({ videoId }: Props) => {
             ※ Note that Niconico videos tend to take longer to download. Please
             wait warmly until they are ready.
           </div>
+          <MediaDownloadStatus source="NICONICO" songId={videoId} />
           <NiconicoQueueButton
             videoId={videoId}
             videoInfo={videoData.nicoVideoInfo}

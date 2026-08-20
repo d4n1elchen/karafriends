@@ -1,7 +1,22 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { parseWebVtt, parseYouTubeJson3 } from "./youtubeCaptions.ts";
+import {
+  applyJapaneseReadingTiming,
+  isJapaneseCaptionCode,
+  parseWebVtt,
+  parseYouTubeJson3,
+} from "./youtubeCaptions.ts";
+
+describe("isJapaneseCaptionCode", () => {
+  it("accepts only Japanese language codes", () => {
+    assert.equal(isJapaneseCaptionCode("ja"), true);
+    assert.equal(isJapaneseCaptionCode("ja-JP"), true);
+    assert.equal(isJapaneseCaptionCode("zh"), false);
+    assert.equal(isJapaneseCaptionCode("zh-Hant"), false);
+    assert.equal(isJapaneseCaptionCode(null), false);
+  });
+});
 
 describe("parseWebVtt", () => {
   it("parses multiline cues and approximates character timing", () => {
@@ -146,5 +161,90 @@ describe("parseYouTubeJson3", () => {
 
     assert.equal(cues.length, 2);
     assert.equal(cues[0].endMs, 4500);
+  });
+});
+
+describe("applyJapaneseReadingTiming", () => {
+  const analyzer = {
+    async parse(text: string) {
+      const readings: Record<string, string | undefined> = {
+        私: "ワタシ",
+        ABC: undefined,
+        学校: "ガッコウ",
+        "。": undefined,
+      };
+
+      return Object.keys(readings)
+        .filter((surface) => text.includes(surface))
+        .sort((left, right) => text.indexOf(left) - text.indexOf(right))
+        .map((surface_form) => ({
+          pronunciation: readings[surface_form],
+          surface_form,
+        }));
+    },
+  };
+
+  it("weights Japanese, Latin text, and punctuation without changing text", async () => {
+    const cues = parseWebVtt(`WEBVTT
+
+00:00:00.000 --> 00:00:10.000
+私ABC学校。`);
+    const [cue] = await applyJapaneseReadingTiming(cues, analyzer);
+    const segments = cue.lines[0].segments;
+    const segment = (text: string, occurrence = 0) =>
+      segments.filter((item) => item.text === text)[occurrence];
+
+    assert.deepEqual(segment("私"), {
+      text: "私",
+      startMs: 0,
+      endMs: 3000,
+    });
+    assert.deepEqual(segment("A"), {
+      text: "A",
+      startMs: 3000,
+      endMs: 4000,
+    });
+    assert.deepEqual(segment("学"), {
+      text: "学",
+      startMs: 6000,
+      endMs: 8000,
+    });
+    assert.deepEqual(segment("校"), {
+      text: "校",
+      startMs: 8000,
+      endMs: 10000,
+    });
+    assert.deepEqual(segment("。"), {
+      text: "。",
+      startMs: 10000,
+      endMs: 10000,
+    });
+    assert.equal(segments.map(({ text }) => text).join(""), "私ABC学校。");
+  });
+
+  it("keeps JSON3 segment offsets as timing anchors", async () => {
+    const cues = parseYouTubeJson3(
+      JSON.stringify({
+        events: [
+          {
+            tStartMs: 0,
+            dDurationMs: 7000,
+            segs: [
+              { utf8: "私", tOffsetMs: 0 },
+              { utf8: "学校", tOffsetMs: 3000 },
+            ],
+          },
+        ],
+      }),
+    );
+    const [cue] = await applyJapaneseReadingTiming(cues, analyzer);
+    const segments = cue.lines[0].segments;
+
+    assert.equal(segments[0].startMs, 0);
+    assert.equal(segments[0].endMs, 3000);
+    assert.equal(segments[1].startMs, 3000);
+    assert.equal(segments[1].endMs, 5000);
+    assert.equal(segments[2].startMs, 5000);
+    assert.equal(segments[2].endMs, 7000);
   });
 });

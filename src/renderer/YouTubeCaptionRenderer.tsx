@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from "react";
 
+import { KuroshiroSingleton } from "../common/joysoundParser";
 import "./YouTubeCaptionRenderer.css";
 import {
+  applyJapaneseReadingTiming,
+  isJapaneseCaptionCode,
   parseWebVtt,
   parseYouTubeJson3,
   YouTubeCaptionCue,
@@ -80,6 +83,8 @@ function CaptionCue(props: {
 
 function YouTubeCaptionRenderer(props: {
   json3Src: string;
+  kuroshiro: KuroshiroSingleton;
+  languageCode: string | null;
   onError: (error: unknown) => void;
   videoRef: React.RefObject<HTMLVideoElement | null>;
   vttSrc: string;
@@ -90,6 +95,26 @@ function YouTubeCaptionRenderer(props: {
   useEffect(() => {
     const abortController = new AbortController();
     setCues([]);
+
+    const applyLanguageTiming = async (parsedCues: YouTubeCaptionCue[]) => {
+      if (!isJapaneseCaptionCode(props.languageCode)) {
+        return parsedCues;
+      }
+
+      try {
+        await props.kuroshiro.analyzerInitPromise;
+        return await applyJapaneseReadingTiming(
+          parsedCues,
+          props.kuroshiro.analyzer,
+        );
+      } catch (error) {
+        console.warn(
+          "Unable to apply Japanese reading timing; using caption timing as-is",
+          error,
+        );
+        return parsedCues;
+      }
+    };
 
     const loadCaptions = async () => {
       try {
@@ -107,7 +132,7 @@ function YouTubeCaptionRenderer(props: {
           throw new Error("The JSON3 file did not contain any usable cues.");
         }
         console.info(`Using JSON3 YouTube captions from ${props.json3Src}`);
-        setCues(parsedCues);
+        setCues(await applyLanguageTiming(parsedCues));
         return;
       } catch (json3Error) {
         if (abortController.signal.aborted) return;
@@ -131,7 +156,7 @@ function YouTubeCaptionRenderer(props: {
         if (parsedCues.length === 0) {
           throw new Error("The VTT file did not contain any usable cues.");
         }
-        setCues(parsedCues);
+        setCues(await applyLanguageTiming(parsedCues));
       } catch (error) {
         if (abortController.signal.aborted) return;
         props.onError(error);
@@ -141,7 +166,7 @@ function YouTubeCaptionRenderer(props: {
     void loadCaptions();
 
     return () => abortController.abort();
-  }, [props.json3Src, props.vttSrc]);
+  }, [props.json3Src, props.kuroshiro, props.languageCode, props.vttSrc]);
 
   useEffect(() => {
     let animationFrame = 0;

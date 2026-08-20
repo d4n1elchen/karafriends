@@ -47,6 +47,7 @@ const popSongMutation = graphql`
         timestamp
         hasAdhocLyrics
         hasCaptions
+        captionCode
         gainValue
         name
       }
@@ -99,6 +100,9 @@ function Player(props: {
   const [youtubeJson3CaptionUrl, setYoutubeJson3CaptionUrl] = useState<
     string | null
   >(null);
+  const [youtubeCaptionCode, setYoutubeCaptionCode] = useState<string | null>(
+    null,
+  );
   const [customCaptionFailed, setCustomCaptionFailed] = useState(false);
   const { playbackState, setPlaybackState } = usePlaybackState();
   const { pitchShiftSemis, setPitchShiftSemis } = usePitchShiftSemis();
@@ -129,6 +133,7 @@ function Player(props: {
             }
             setYoutubeCaptionUrl(null);
             setYoutubeJson3CaptionUrl(null);
+            setYoutubeCaptionCode(null);
 
             setPitchShiftSemis(0);
 
@@ -295,6 +300,7 @@ function Player(props: {
                   setYoutubeJson3CaptionUrl(
                     mediaUrl(`yt-${popSong.songId}.json3`),
                   );
+                  setYoutubeCaptionCode(popSong.captionCode ?? null);
                 }
 
                 console.log(
@@ -432,6 +438,8 @@ function Player(props: {
       youtubeJson3CaptionUrl ? (
         <YouTubeCaptionRenderer
           json3Src={youtubeJson3CaptionUrl}
+          kuroshiro={props.kuroshiro}
+          languageCode={youtubeCaptionCode}
           videoRef={videoRef}
           vttSrc={youtubeCaptionUrl}
           onError={(error) => {

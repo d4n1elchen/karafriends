@@ -203,6 +203,7 @@ interface YoutubeQueueItem extends QueueItemInterface {
   readonly __typename: "YoutubeQueueItem";
   readonly hasAdhocLyrics: boolean;
   readonly hasCaptions: boolean;
+  readonly captionCode: string | null;
   readonly gainValue: number;
 }
 

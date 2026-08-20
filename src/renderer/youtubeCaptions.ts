@@ -2,6 +2,7 @@ export interface YouTubeCaptionSegment {
   endMs: number;
   startMs: number;
   text: string;
+  timingGroup?: number;
 }
 
 export interface YouTubeCaptionLine {
@@ -10,8 +11,19 @@ export interface YouTubeCaptionLine {
 
 export interface YouTubeCaptionCue {
   endMs: number;
+  hasPreciseTiming?: boolean;
   lines: YouTubeCaptionLine[];
   startMs: number;
+}
+
+interface JapaneseAnalyzerToken {
+  pronunciation?: string;
+  reading?: string;
+  surface_form: string;
+}
+
+export interface JapaneseCaptionAnalyzer {
+  parse(text: string): Promise<JapaneseAnalyzerToken[]>;
 }
 
 interface Json3Segment {
@@ -35,6 +47,13 @@ const ZERO_DURATION_PUNCTUATION = new Set(
     "。、，．！？：；…‥・「」『』【】（）［］｛｝〈〉《》〔〕〜～“”‘’«»‹›—–♪",
   ),
 );
+const SMALL_KANA = new Set(
+  Array.from("ぁぃぅぇぉゃゅょゎゕゖァィゥェォャュョヮヵヶ"),
+);
+
+export function isJapaneseCaptionCode(languageCode: string | null): boolean {
+  return /^ja(?:-|$)/.test(languageCode?.toLowerCase() || "");
+}
 
 function parseTimestamp(value: string): number {
   const parts = value.replace(",", ".").split(":");
@@ -135,34 +154,42 @@ function approximateSegments(
   text: string,
   startMs: number,
   endMs: number,
+  suppliedTimingWeights?: number[],
+  timingGroup?: number,
 ): YouTubeCaptionLine[] {
   const lines: YouTubeCaptionLine[] = [{ segments: [] }];
   const characters = Array.from(text);
-  const totalTimingWeight = characters.reduce(
-    (total, character) => total + characterTimingWeight(character),
+  const timingWeights =
+    suppliedTimingWeights?.length === characters.length
+      ? suppliedTimingWeights
+      : characters.map(characterTimingWeight);
+  const totalTimingWeight = timingWeights.reduce(
+    (total, weight) => total + weight,
     0,
   );
   const timingDivisor = Math.max(1, totalTimingWeight);
   const duration = Math.max(1, endMs - startMs);
   let elapsedTimingWeight = 0;
 
-  characters.forEach((character) => {
+  characters.forEach((character, index) => {
     if (character === "\n") {
       lines.push({ segments: [] });
       return;
     }
 
-    const timingWeight = characterTimingWeight(character);
+    const timingWeight = timingWeights[index];
     const segmentStart =
       startMs + (duration * elapsedTimingWeight) / timingDivisor;
     elapsedTimingWeight += timingWeight;
     const segmentEnd =
       startMs + (duration * elapsedTimingWeight) / timingDivisor;
-    lines[lines.length - 1].segments.push({
+    const segment: YouTubeCaptionSegment = {
       endMs: segmentEnd,
       startMs: segmentStart,
       text: character,
-    });
+    };
+    if (timingGroup !== undefined) segment.timingGroup = timingGroup;
+    lines[lines.length - 1].segments.push(segment);
   });
 
   // A punctuation-only cue still needs a finite display interval.
@@ -253,9 +280,11 @@ export function parseWebVtt(rawVtt: string): YouTubeCaptionCue[] {
 
     cues.push({
       endMs,
+      hasPreciseTiming: INLINE_TIMESTAMP.test(text),
       lines: parseCueText(text, startMs, endMs),
       startMs,
     });
+    INLINE_TIMESTAMP.lastIndex = 0;
   });
 
   return cues.sort((left, right) => left.startMs - right.startMs);
@@ -274,7 +303,7 @@ export function parseYouTubeJson3(rawJson: string): YouTubeCaptionCue[] {
         Array.isArray(event.segs),
     );
 
-  return events.flatMap((event, eventIndex) => {
+  return events.flatMap<YouTubeCaptionCue>((event, eventIndex) => {
     const startMs = event.tStartMs as number;
     const nextStartMs = events[eventIndex + 1]?.tStartMs;
     const declaredDuration =
@@ -303,6 +332,7 @@ export function parseYouTubeJson3(rawJson: string): YouTubeCaptionCue[] {
       return [
         {
           endMs,
+          hasPreciseTiming: false,
           lines: approximateSegments(text.trim(), startMs, endMs),
           startMs,
         },
@@ -337,6 +367,8 @@ export function parseYouTubeJson3(rawJson: string): YouTubeCaptionCue[] {
           segment.utf8 as string,
           segmentStartMs,
           segmentEndMs,
+          undefined,
+          segmentIndex,
         ),
       );
     });
@@ -344,9 +376,154 @@ export function parseYouTubeJson3(rawJson: string): YouTubeCaptionCue[] {
     return [
       {
         endMs,
+        hasPreciseTiming: true,
         lines: lines.filter((line) => line.segments.length > 0),
         startMs,
       },
     ];
   });
+}
+
+function moraCount(reading: string): number {
+  return Array.from(reading).reduce((count, character) => {
+    if (SMALL_KANA.has(character)) return count;
+    return count + characterTimingWeight(character);
+  }, 0);
+}
+
+function tokenTimingWeights(token: JapaneseAnalyzerToken): number[] {
+  const characters = Array.from(token.surface_form);
+  const genericWeights = characters.map(characterTimingWeight);
+  const timedCharacterCount = genericWeights.filter(
+    (weight) => weight > 0,
+  ).length;
+  const reading = token.pronunciation || token.reading;
+  const readingMorae = reading ? moraCount(reading) : 0;
+
+  if (readingMorae <= 0 || timedCharacterCount === 0) return genericWeights;
+
+  const weightPerCharacter = readingMorae / timedCharacterCount;
+  return genericWeights.map((weight) => (weight > 0 ? weightPerCharacter : 0));
+}
+
+function timingWeightsForTokens(
+  text: string,
+  tokens: JapaneseAnalyzerToken[],
+): number[] {
+  const weights: number[] = [];
+  let cursor = 0;
+
+  tokens.forEach((token) => {
+    if (!token.surface_form) return;
+    const tokenIndex = text.indexOf(token.surface_form, cursor);
+    if (tokenIndex < 0) return;
+
+    weights.push(
+      ...Array.from(text.slice(cursor, tokenIndex)).map(characterTimingWeight),
+      ...tokenTimingWeights(token),
+    );
+    cursor = tokenIndex + token.surface_form.length;
+  });
+
+  weights.push(...Array.from(text.slice(cursor)).map(characterTimingWeight));
+  return weights;
+}
+
+function retimeSegments(
+  segments: YouTubeCaptionSegment[],
+  timingWeights: number[],
+): YouTubeCaptionSegment[] {
+  const startMs = Math.min(...segments.map((segment) => segment.startMs));
+  const endMs = Math.max(...segments.map((segment) => segment.endMs));
+  const totalWeight = timingWeights.reduce(
+    (total, weight) => total + weight,
+    0,
+  );
+  if (totalWeight <= 0) {
+    return segments.map((segment) => ({ ...segment, startMs, endMs }));
+  }
+
+  const duration = endMs - startMs;
+  let elapsedWeight = 0;
+  let characterIndex = 0;
+  return segments.map((segment) => {
+    const segmentCharacterCount = Array.from(segment.text).length;
+    const segmentWeight = timingWeights
+      .slice(characterIndex, characterIndex + segmentCharacterCount)
+      .reduce((total, weight) => total + weight, 0);
+    characterIndex += segmentCharacterCount;
+    const segmentStartMs = startMs + (duration * elapsedWeight) / totalWeight;
+    elapsedWeight += segmentWeight;
+
+    return {
+      ...segment,
+      endMs: startMs + (duration * elapsedWeight) / totalWeight,
+      startMs: segmentStartMs,
+    };
+  });
+}
+
+export async function applyJapaneseReadingTiming(
+  cues: YouTubeCaptionCue[],
+  analyzer: JapaneseCaptionAnalyzer,
+): Promise<YouTubeCaptionCue[]> {
+  const retimedCues: YouTubeCaptionCue[] = [];
+
+  for (const cue of cues) {
+    const groupedSegments = new Map<number, YouTubeCaptionSegment[]>();
+    cue.lines.forEach((line) =>
+      line.segments.forEach((segment) => {
+        if (segment.timingGroup === undefined) return;
+        const group = groupedSegments.get(segment.timingGroup) || [];
+        group.push(segment);
+        groupedSegments.set(segment.timingGroup, group);
+      }),
+    );
+
+    if (groupedSegments.size > 0) {
+      const replacements = new Map<
+        YouTubeCaptionSegment,
+        YouTubeCaptionSegment
+      >();
+      for (const segments of groupedSegments.values()) {
+        const groupText = segments.map((segment) => segment.text).join("");
+        const groupTokens = await analyzer.parse(groupText);
+        const weights = timingWeightsForTokens(groupText, groupTokens);
+        retimeSegments(segments, weights).forEach((segment, index) =>
+          replacements.set(segments[index], segment),
+        );
+      }
+
+      retimedCues.push({
+        ...cue,
+        lines: cue.lines.map((line) => ({
+          segments: line.segments.map(
+            (segment) => replacements.get(segment) || segment,
+          ),
+        })),
+      });
+      continue;
+    }
+
+    if (cue.hasPreciseTiming) {
+      retimedCues.push(cue);
+      continue;
+    }
+
+    const text = cue.lines
+      .map((line) => line.segments.map((segment) => segment.text).join(""))
+      .join("\n");
+    const tokens = await analyzer.parse(text);
+    retimedCues.push({
+      ...cue,
+      lines: approximateSegments(
+        text,
+        cue.startMs,
+        cue.endMs,
+        timingWeightsForTokens(text, tokens),
+      ),
+    });
+  }
+
+  return retimedCues;
 }

@@ -9,11 +9,15 @@ import { withLoader } from "../components/Loader";
 import SearchFormWrapper from "../components/SearchFormWrapper";
 import MediaDownloadStatus from "../components/MediaDownloadStatus";
 import SongTitle from "../components/SongTitle";
+import YouTubeSearchResults from "../components/YouTubeSearchResults";
 import { JoysoundSongPageQuery } from "./__generated__/JoysoundSongPageQuery.graphql";
 import { JoysoundSongPageBackgroundQuery } from "./__generated__/JoysoundSongPageBackgroundQuery.graphql";
 import { JoysoundSongPageSetBackgroundMutation } from "./__generated__/JoysoundSongPageSetBackgroundMutation.graphql";
 
-import { getVideoId as getYoutubeVideoId } from "./YouTubePage";
+import {
+  getVideoId as getYoutubeVideoId,
+  isYouTubeVideoId,
+} from "./YouTubePage";
 
 const joysoundSongPageQuery = graphql`
   query JoysoundSongPageQuery($id: String!) {
@@ -71,29 +75,34 @@ const JoysoundSongPage = () => {
   const [validatedYoutubeId, setValidatedYoutubeVideoId] = useState<string>("");
   const [waitForVideoIdInput, setWaitForVideoIdInput] =
     useState<boolean>(false);
+  const [youtubeSearchQuery, setYoutubeSearchQuery] = useState<string>("");
+
+  const selectYoutubeVideo = (videoId: string) => {
+    setYoutubeVideoId(videoId);
+    setYoutubeSearchQuery("");
+    setWaitForVideoIdInput(false);
+    history.replaceState({}, "", `#/joysoundSong/${song.id}/${videoId}`);
+  };
 
   const onSubmitYoutubeForm = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!inputRef.current) return;
 
-    const newYoutubeVideoId = getYoutubeVideoId(inputRef.current.value);
+    const input = inputRef.current.value.trim();
+    const newYoutubeVideoId = getYoutubeVideoId(input);
 
-    if (newYoutubeVideoId !== null) {
-      setYoutubeVideoId(newYoutubeVideoId);
-      setWaitForVideoIdInput(false);
-
-      history.replaceState(
-        {},
-        "",
-        `#/joysoundSong/${song.id}/${newYoutubeVideoId}`,
-      );
+    if (newYoutubeVideoId && isYouTubeVideoId(newYoutubeVideoId)) {
+      selectYoutubeVideo(newYoutubeVideoId);
+    } else if (input) {
+      setYoutubeSearchQuery(input);
     }
   };
 
   const detachVideo = () => {
     setYoutubeVideoId("");
     setValidatedYoutubeVideoId("");
+    setYoutubeSearchQuery("");
 
     history.replaceState({}, "", `#/joysoundSong/${song.id}`);
     commitBackground({
@@ -134,7 +143,10 @@ const JoysoundSongPage = () => {
       ) : (
         <Button
           full
-          onClick={() => setWaitForVideoIdInput(!waitForVideoIdInput)}
+          onClick={() => {
+            if (waitForVideoIdInput) setYoutubeSearchQuery("");
+            setWaitForVideoIdInput(!waitForVideoIdInput);
+          }}
         >
           {waitForVideoIdInput ? "Cancel" : "Set background video from YouTube"}
         </Button>
@@ -144,13 +156,22 @@ const JoysoundSongPage = () => {
           <form onSubmit={onSubmitYoutubeForm}>
             <input
               ref={inputRef}
-              placeholder="Youtube video URL or ID"
-              defaultValue={youtubeVideoId}
+              placeholder="Song name, YouTube URL, or video ID"
+              defaultValue={youtubeVideoId || `${song.name} ${song.artistName}`}
             />
             <Button full type="submit">
-              Set video
+              Search / set video
             </Button>
           </form>
+          {youtubeSearchQuery && (
+            <>
+              <p>Select a result to use as the background video:</p>
+              <YouTubeSearchResults
+                query={youtubeSearchQuery}
+                onSelectVideo={selectYoutubeVideo}
+              />
+            </>
+          )}
         </SearchFormWrapper>
       ) : (
         <>

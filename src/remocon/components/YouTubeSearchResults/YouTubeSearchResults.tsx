@@ -26,10 +26,11 @@ const youtubeSearchResultsQuery = graphql`
 `;
 
 interface Props {
+  onSelectVideo?: (videoId: string) => void;
   query: string;
 }
 
-const YouTubeSearchResults = ({ query }: Props) => {
+const YouTubeSearchResults = ({ onSelectVideo, query }: Props) => {
   const data = useLazyLoadQuery<YouTubeSearchResultsQuery>(
     youtubeSearchResultsQuery,
     { query },
@@ -49,8 +50,8 @@ const YouTubeSearchResults = ({ query }: Props) => {
 
   return (
     <List>
-      {data.youtubeSearch.results.map((video) => (
-        <Link key={video.videoId} to={`/search/youtube/${video.videoId}`}>
+      {data.youtubeSearch.results.map((video) => {
+        const result = (
           <ListItem
             cornerAccessory={
               video.downloaded ? (
@@ -78,8 +79,24 @@ const YouTubeSearchResults = ({ query }: Props) => {
               </div>
             </div>
           </ListItem>
-        </Link>
-      ))}
+        );
+
+        return onSelectVideo ? (
+          <button
+            key={video.videoId}
+            type="button"
+            className={styles.selectResult}
+            onClick={() => onSelectVideo(video.videoId)}
+            aria-label={`Use ${video.title} as background video`}
+          >
+            {result}
+          </button>
+        ) : (
+          <Link key={video.videoId} to={`/search/youtube/${video.videoId}`}>
+            {result}
+          </Link>
+        );
+      })}
     </List>
   );
 };

@@ -23,20 +23,47 @@ function getSongLink(queueItemType: string, songId: string): string {
   return `/song/${songId}`;
 }
 
+function getProvider(queueItemType: string): {
+  className: string;
+  label: string;
+} {
+  switch (queueItemType) {
+    case "DamQueueItem":
+      return { className: styles.dam, label: "DAM" };
+    case "JoysoundQueueItem":
+      return { className: styles.joysound, label: "JOYSOUND" };
+    case "YoutubeQueueItem":
+      return { className: styles.youtube, label: "YouTube" };
+    case "NicoQueueItem":
+      return { className: styles.niconico, label: "Niconico" };
+  }
+
+  return { className: styles.unknown, label: "Unknown" };
+}
+
 const SongHistoryItem = ({ song }: Props) => {
   invariant(song.__typename !== "%other");
 
   const songLink = getSongLink(song.__typename, song.songId);
+  const provider = getProvider(song.__typename);
   const date = new Date(parseInt(song.timestamp, 10));
 
   return (
     <Link to={songLink}>
       <ListItem>
         <div>
-          <strong>{song.name}</strong>
-          <span className={styles.date}>
-            Queued by: {song.userIdentity.nickname}
-          </span>
+          <div className={styles.titleRow}>
+            <strong>{song.name}</strong>
+            <span
+              className={`${styles.providerBadge} ${provider.className}`}
+              aria-label={`${provider.label} provider`}
+            >
+              {provider.label}
+            </span>
+            <span className={styles.queuedBy}>
+              Queued by: {song.userIdentity.nickname}
+            </span>
+          </div>
         </div>
 
         <div>

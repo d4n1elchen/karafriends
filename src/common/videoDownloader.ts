@@ -21,13 +21,37 @@ import {
 } from "./joysoundMediaMetadata";
 import { getWebDataDirectory, isElectronRuntime } from "./runtimePaths";
 import { getYoutubeYtDlpArgs } from "./youtubeYtDlpArgs";
-import { getMediaCacheRequirements, MediaSource } from "./mediaCacheCore";
+import {
+  getMediaCacheRequirements,
+  hasAnyMediaCache,
+  MediaSource,
+} from "./mediaCacheCore";
 
 export const TEMP_FOLDER: string =
   process.env.KARAFRIENDS_MEDIA_DIR ||
   (isElectronRuntime()
     ? path.join(os.tmpdir(), "karafriends_tmp")
     : path.join(getWebDataDirectory(), "media"));
+
+let mediaCacheSnapshot: { expiresAt: number; filenames: string[] } | null =
+  null;
+
+function getMediaCacheSnapshot(): string[] {
+  const now = Date.now();
+  if (mediaCacheSnapshot && mediaCacheSnapshot.expiresAt > now) {
+    return mediaCacheSnapshot.filenames;
+  }
+
+  let filenames: string[] = [];
+  try {
+    filenames = fs.readdirSync(TEMP_FOLDER);
+  } catch {
+    // A fresh installation may not have created the media directory yet.
+  }
+
+  mediaCacheSnapshot = { expiresAt: now + 1000, filenames };
+  return filenames;
+}
 
 export function isMediaDownloaded(
   source: MediaSource,
@@ -44,6 +68,13 @@ export function isMediaDownloaded(
     requirements.length > 0 &&
     requirements.every((filename) => fs.existsSync(filename))
   );
+}
+
+export function isAnyMediaDownloaded(
+  source: MediaSource,
+  songId: string,
+): boolean {
+  return hasAnyMediaCache(getMediaCacheSnapshot(), source, songId);
 }
 const captionCodeRe: RegExp = new RegExp(/^[a-z]{2}$/);
 

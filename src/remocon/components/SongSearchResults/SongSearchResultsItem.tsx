@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router";
 
 import { ListItem } from "../List";
+import { DownloadBadge } from "../MediaDownloadStatus";
 import WeebText from "../WeebText";
 import { SongSearchResults_songsByName$data } from "./__generated__/SongSearchResults_songsByName.graphql";
 
@@ -14,6 +15,7 @@ const SongSearchResultsItem = ({
   nameYomi,
   artistName,
   artistNameYomi,
+  downloaded,
 }: Props) => (
   <Link to={`/song/${id}`}>
     <ListItem>
@@ -23,6 +25,7 @@ const SongSearchResultsItem = ({
       <div>
         <WeebText text={artistName} yomi={artistNameYomi} />
       </div>
+      <DownloadBadge downloaded={downloaded} hideWhenMissing />
     </ListItem>
   </Link>
 );

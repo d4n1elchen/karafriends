@@ -4,6 +4,7 @@ import { Link } from "react-router";
 
 import { List, ListItem } from "../List";
 import { withLoader } from "../Loader";
+import { DownloadBadge } from "../MediaDownloadStatus";
 import * as styles from "./NiconicoSearchResults.module.scss";
 import { NiconicoSearchResultsQuery } from "./__generated__/NiconicoSearchResultsQuery.graphql";
 
@@ -17,6 +18,7 @@ const niconicoSearchResultsQuery = graphql`
         thumbnailUrl
         lengthSeconds
         viewCount
+        downloaded
       }
     }
   }
@@ -69,6 +71,7 @@ const NiconicoSearchResults = ({ query }: Props) => {
                   {formatDuration(video.lengthSeconds)} · {video.viewCount}{" "}
                   views
                 </span>
+                <DownloadBadge downloaded={video.downloaded} hideWhenMissing />
               </div>
             </div>
           </ListItem>

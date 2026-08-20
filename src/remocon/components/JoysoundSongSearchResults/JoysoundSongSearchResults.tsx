@@ -34,6 +34,7 @@ const joysoundSongSearchResultsPaginationQuery = graphql`
           id
           name
           artistName
+          downloaded
         }
       }
     }

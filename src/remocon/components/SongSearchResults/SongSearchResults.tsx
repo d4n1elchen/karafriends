@@ -33,6 +33,7 @@ const songSearchResultsPaginationQuery = graphql`
           nameYomi
           artistName
           artistNameYomi
+          downloaded
         }
       }
     }

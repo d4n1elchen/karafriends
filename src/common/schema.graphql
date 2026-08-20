@@ -166,6 +166,7 @@ enum VocalType {
 
 type Song {
   id: ID!
+  downloaded: Boolean!
   name: String!
   nameYomi: String!
   artistName: String!
@@ -180,6 +181,7 @@ type Song {
 
 type JoysoundSong {
   id: ID!
+  downloaded: Boolean!
   name: String!
   artistName: String!
   lyricsPreview: String
@@ -389,6 +391,7 @@ type NiconicoSearchResponse {
 
 type NiconicoSearchResult {
   videoId: String!
+  downloaded: Boolean!
   title: String!
   thumbnailUrl: String
   lengthSeconds: Int!
@@ -402,6 +405,7 @@ type YoutubeSearchResponse {
 
 type YoutubeSearchResult {
   videoId: String!
+  downloaded: Boolean!
   title: String!
   author: String!
   thumbnailUrl: String

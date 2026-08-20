@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 
-import { getMediaCacheRequirements } from "./mediaCacheCore.ts";
+import {
+  getMediaCacheRequirements,
+  hasAnyMediaCache,
+} from "./mediaCacheCore.ts";
 
 const mediaDirectory = path.join("data", "media");
 
@@ -50,4 +53,26 @@ test("unsafe or incomplete cache keys cannot probe the filesystem", () => {
     getMediaCacheRequirements(mediaDirectory, "DAM", "42", null),
     [],
   );
+});
+
+test("search-result cache status finds any usable source variant", () => {
+  assert.equal(hasAnyMediaCache(["42-1.mp4"], "DAM", "42"), true);
+  assert.equal(
+    hasAnyMediaCache(
+      ["joysound-1234-custom.mp4", "joysound-1234.joy_02"],
+      "JOYSOUND",
+      "1234",
+    ),
+    true,
+  );
+  assert.equal(
+    hasAnyMediaCache(["joysound-1234-custom.mp4"], "JOYSOUND", "1234"),
+    false,
+  );
+  assert.equal(
+    hasAnyMediaCache(["yt-video.mp4", "yt-video.vtt"], "YOUTUBE", "video"),
+    true,
+  );
+  assert.equal(hasAnyMediaCache(["yt-video.vtt"], "YOUTUBE", "video"), false);
+  assert.equal(hasAnyMediaCache(["nico-sm9.mp4"], "NICONICO", "sm9"), true);
 });

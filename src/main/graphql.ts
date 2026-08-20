@@ -43,6 +43,7 @@ import {
   downloadNicoVideo,
   downloadYoutubeVideo,
   getVideoDownloadProgress,
+  isAnyMediaDownloaded,
   isMediaDownloaded,
   TEMP_FOLDER,
 } from "./../common/videoDownloader";
@@ -501,11 +502,17 @@ const resolvers = {
     artistName(parent: JoysoundSongParent) {
       return parent.artistName;
     },
+    downloaded(parent: JoysoundSongParent) {
+      return isAnyMediaDownloaded("JOYSOUND", parent.id);
+    },
   },
 
   Song: {
     id(parent: SongParent) {
       return parent.id;
+    },
+    downloaded(parent: SongParent) {
+      return isAnyMediaDownloaded("DAM", parent.id);
     },
     name(parent: SongParent) {
       return parent.name;
@@ -548,6 +555,18 @@ const resolvers = {
       return dataSources.minsei
         .getScoringData(parent.id)
         .then((data) => Array.from(new Uint8Array(data)));
+    },
+  },
+
+  YoutubeSearchResult: {
+    downloaded(parent: { videoId: string }) {
+      return isAnyMediaDownloaded("YOUTUBE", parent.videoId);
+    },
+  },
+
+  NiconicoSearchResult: {
+    downloaded(parent: { videoId: string }) {
+      return isAnyMediaDownloaded("NICONICO", parent.videoId);
     },
   },
   Artist: {

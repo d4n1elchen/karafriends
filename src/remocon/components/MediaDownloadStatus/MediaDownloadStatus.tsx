@@ -1,9 +1,8 @@
-import classNames from "classnames";
 import React from "react";
 import { graphql, useLazyLoadQuery } from "react-relay";
 
 import { MediaDownloadStatusQuery } from "./__generated__/MediaDownloadStatusQuery.graphql";
-import * as styles from "./MediaDownloadStatus.module.scss";
+import DownloadBadge from "./DownloadBadge";
 
 const mediaDownloadStatusQuery = graphql`
   query MediaDownloadStatusQuery(
@@ -28,15 +27,7 @@ const MediaDownloadStatus = ({ source, songId, suffix = null }: Props) => {
     { fetchPolicy: "network-only" },
   );
 
-  return (
-    <span
-      className={classNames(styles.status, {
-        [styles.downloaded]: data.mediaDownloaded,
-      })}
-    >
-      {data.mediaDownloaded ? "✓ Downloaded" : "Not downloaded"}
-    </span>
-  );
+  return <DownloadBadge downloaded={data.mediaDownloaded} />;
 };
 
 export default MediaDownloadStatus;

@@ -4,6 +4,35 @@ export type MediaSource = "DAM" | "JOYSOUND" | "YOUTUBE" | "NICONICO";
 
 const safeCacheKey = /^[A-Za-z0-9_-]+$/;
 
+export function hasAnyMediaCache(
+  filenames: string[],
+  source: MediaSource,
+  songId: string,
+): boolean {
+  if (!safeCacheKey.test(songId)) return false;
+
+  switch (source) {
+    case "DAM":
+      return filenames.some(
+        (filename) =>
+          filename.startsWith(`${songId}-`) && filename.endsWith(".mp4"),
+      );
+    case "JOYSOUND":
+      return (
+        filenames.includes(`joysound-${songId}.joy_02`) &&
+        filenames.some(
+          (filename) =>
+            filename.startsWith(`joysound-${songId}-`) &&
+            filename.endsWith(".mp4"),
+        )
+      );
+    case "YOUTUBE":
+      return filenames.includes(`yt-${songId}.mp4`);
+    case "NICONICO":
+      return filenames.includes(`nico-${songId}.mp4`);
+  }
+}
+
 export function getMediaCacheRequirements(
   mediaDirectory: string,
   source: MediaSource,

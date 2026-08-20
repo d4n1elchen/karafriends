@@ -4,6 +4,7 @@ import { Link } from "react-router";
 
 import { List, ListItem } from "../List";
 import { withLoader } from "../Loader";
+import { DownloadBadge } from "../MediaDownloadStatus";
 import * as styles from "./YouTubeSearchResults.module.scss";
 import { YouTubeSearchResultsQuery } from "./__generated__/YouTubeSearchResultsQuery.graphql";
 
@@ -17,6 +18,7 @@ const youtubeSearchResultsQuery = graphql`
         author
         thumbnailUrl
         duration
+        downloaded
       }
     }
   }
@@ -63,6 +65,7 @@ const YouTubeSearchResults = ({ query }: Props) => {
                 {video.duration && (
                   <span className={styles.duration}>{video.duration}</span>
                 )}
+                <DownloadBadge downloaded={video.downloaded} hideWhenMissing />
               </div>
             </div>
           </ListItem>

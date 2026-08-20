@@ -11,6 +11,7 @@ import { withLoader } from "../components/Loader";
 import SearchFormWrapper from "../components/SearchFormWrapper";
 import YouTubeInfo from "../components/YouTubeInfo";
 import YouTubeSearchResults from "../components/YouTubeSearchResults";
+import * as styles from "./YouTubePage.module.scss";
 import {
   buildYoutubeSearchQuery,
   parseYoutubeKaraokeKeyword,
@@ -150,18 +151,20 @@ const YouTubePage = () => {
           placeholder="Song name, YouTube URL, or video ID"
           defaultValue={videoId || query}
         />
-        <label htmlFor="youtube-karaoke-keyword">Karaoke keyword</label>
-        <select
-          id="youtube-karaoke-keyword"
-          value={karaokeKeyword}
-          onChange={onKaraokeKeywordChanged}
-        >
-          <option value="none">None</option>
-          <option value="jp">Japanese — カラオケ</option>
-          <option value="en">English — karaoke</option>
-          <option value="zh">Chinese — 卡拉OK</option>
-        </select>
-        <Button type="submit">Search</Button>
+        <div className={styles.keywordRow}>
+          <label htmlFor="youtube-karaoke-keyword">Add keyword:</label>
+          <select
+            id="youtube-karaoke-keyword"
+            value={karaokeKeyword}
+            onChange={onKaraokeKeywordChanged}
+          >
+            <option value="none">None</option>
+            <option value="jp">カラオケ</option>
+            <option value="en">karaoke</option>
+            <option value="zh">卡拉OK</option>
+          </select>
+          <Button type="submit">Search</Button>
+        </div>
       </form>
       {query !== "" && (
         <YouTubeSearchResults

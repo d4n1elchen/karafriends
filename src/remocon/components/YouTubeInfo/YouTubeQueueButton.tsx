@@ -5,7 +5,11 @@ import { invariant } from "ts-invariant";
 
 import environment from "../../../common/graphqlEnvironment";
 import Button from "../Button";
-import { DOWNLOADING_TEXT, queuedText } from "../queueButtonText";
+import {
+  DOWNLOADING_TEXT,
+  downloadingText,
+  queuedText,
+} from "../queueButtonText";
 
 import { YouTubeInfoVideoInfoQuery$data } from "./__generated__/YouTubeInfoVideoInfoQuery.graphql";
 import { YouTubeQueueButtonSongQueuedQuery } from "./__generated__/YouTubeQueueButtonSongQueuedQuery.graphql";
@@ -15,8 +19,14 @@ import {
 } from "./__generated__/YouTubeQueueButtonMutation.graphql";
 
 const youTubeQueueButtonSongQueuedQuery = graphql`
-  query YouTubeQueueButtonSongQueuedQuery($timestamp: String!) {
+  query YouTubeQueueButtonSongQueuedQuery(
+    $timestamp: String!
+    $songId: String!
+  ) {
     songQueued(timestamp: $timestamp)
+    videoDownloadProgress(videoDownloadType: 1, songId: $songId, suffix: null) {
+      progress
+    }
   }
 `;
 
@@ -80,11 +90,14 @@ const YouTubeQueueButton = ({
           youTubeQueueButtonSongQueuedQuery,
           {
             timestamp: queuedTimestampRef.current!,
+            songId: videoId,
           },
         ).subscribe({
           next: (data: YouTubeQueueButtonSongQueuedQuery["response"]) => {
             if (data.songQueued) {
               setText(queuedTextRef.current || "Queued");
+            } else {
+              setText(downloadingText(data.videoDownloadProgress.progress));
             }
           },
         });

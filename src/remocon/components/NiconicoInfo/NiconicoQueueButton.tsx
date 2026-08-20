@@ -5,7 +5,11 @@ import { invariant } from "ts-invariant";
 
 import environment from "../../../common/graphqlEnvironment";
 import Button from "../Button";
-import { DOWNLOADING_TEXT, queuedText } from "../queueButtonText";
+import {
+  DOWNLOADING_TEXT,
+  downloadingText,
+  queuedText,
+} from "../queueButtonText";
 
 import { NiconicoInfoVideoInfoQuery$data } from "./__generated__/NiconicoInfoVideoInfoQuery.graphql";
 import { NiconicoQueueButtonSongQueuedQuery } from "./__generated__/NiconicoQueueButtonSongQueuedQuery.graphql";
@@ -15,8 +19,14 @@ import {
 } from "./__generated__/NiconicoQueueButtonMutation.graphql";
 
 const niconicoQueueButtonSongQueuedQuery = graphql`
-  query NiconicoQueueButtonSongQueuedQuery($timestamp: String!) {
+  query NiconicoQueueButtonSongQueuedQuery(
+    $timestamp: String!
+    $songId: String!
+  ) {
     songQueued(timestamp: $timestamp)
+    videoDownloadProgress(videoDownloadType: 2, songId: $songId, suffix: null) {
+      progress
+    }
   }
 `;
 
@@ -72,11 +82,14 @@ const NiconicoQueueButton = ({ videoId, videoInfo, userIdentity }: Props) => {
           niconicoQueueButtonSongQueuedQuery,
           {
             timestamp: queuedTimestampRef.current!,
+            songId: videoId,
           },
         ).subscribe({
           next: (data: NiconicoQueueButtonSongQueuedQuery["response"]) => {
             if (data.songQueued) {
               setText(queuedTextRef.current || "Queued");
+            } else {
+              setText(downloadingText(data.videoDownloadProgress.progress));
             }
           },
         });

@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { queuedText } from "./queueButtonText.ts";
+import {
+  DOWNLOADING_TEXT,
+  downloadingText,
+  queuedText,
+} from "./queueButtonText.ts";
+
+test("formats download progress without reporting invalid percentages", () => {
+  assert.equal(downloadingText(0.423), "Downloading… 42%");
+  assert.equal(downloadingText(2), "Downloading… 100%");
+  assert.equal(downloadingText(-1), DOWNLOADING_TEXT);
+});
 
 test("formats a queue ETA as an approximate start time", () => {
   assert.equal(queuedText(330), "Queued — starts in ~5:30");

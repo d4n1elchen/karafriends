@@ -5,7 +5,11 @@ import { invariant } from "ts-invariant";
 
 import environment from "../../../common/graphqlEnvironment";
 import Button from "../Button";
-import { DOWNLOADING_TEXT, queuedText } from "../queueButtonText";
+import {
+  DOWNLOADING_TEXT,
+  downloadingText,
+  queuedText,
+} from "../queueButtonText";
 
 import { JoysoundSongPageQuery$data } from "../../pages/__generated__/JoysoundSongPageQuery.graphql";
 import { JoysoundQueueButtonSongQueuedQuery } from "./__generated__/JoysoundQueueButtonSongQueuedQuery.graphql";
@@ -15,8 +19,19 @@ import {
 } from "./__generated__/JoysoundQueueButtonMutation.graphql";
 
 const joysoundQueueButtonSongQueuedQuery = graphql`
-  query JoysoundQueueButtonSongQueuedQuery($timestamp: String!) {
+  query JoysoundQueueButtonSongQueuedQuery(
+    $timestamp: String!
+    $songId: String!
+    $suffix: String
+  ) {
     songQueued(timestamp: $timestamp)
+    videoDownloadProgress(
+      videoDownloadType: 0
+      songId: $songId
+      suffix: $suffix
+    ) {
+      progress
+    }
   }
 `;
 
@@ -85,11 +100,15 @@ const JoysoundQueueButton = ({
           joysoundQueueButtonSongQueuedQuery,
           {
             timestamp: queuedTimestampRef.current!,
+            songId: song.id,
+            suffix: youtubeVideoId,
           },
         ).subscribe({
           next: (data: JoysoundQueueButtonSongQueuedQuery["response"]) => {
             if (data.songQueued) {
               setText(queuedTextRef.current || "Queued");
+            } else {
+              setText(downloadingText(data.videoDownloadProgress.progress));
             }
           },
         });

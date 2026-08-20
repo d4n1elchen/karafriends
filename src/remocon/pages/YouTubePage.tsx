@@ -152,6 +152,7 @@ const YouTubePage = () => {
           defaultValue={videoId || query}
         />
         <div className={styles.keywordRow}>
+          <Button type="submit">Search</Button>
           <label htmlFor="youtube-karaoke-keyword">Add keyword:</label>
           <select
             id="youtube-karaoke-keyword"
@@ -163,7 +164,6 @@ const YouTubePage = () => {
             <option value="en">karaoke</option>
             <option value="zh">卡拉OK</option>
           </select>
-          <Button type="submit">Search</Button>
         </div>
       </form>
       {query !== "" && (

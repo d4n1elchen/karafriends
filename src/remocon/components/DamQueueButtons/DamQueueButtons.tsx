@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 
 import useUserIdentity from "../../hooks/useUserIdentity";
 import {
@@ -6,7 +6,6 @@ import {
   VocalType,
 } from "../../pages/__generated__/SongPageQuery.graphql";
 import DamQueueButton from "./DamQueueButton";
-import MediaDownloadStatus from "../MediaDownloadStatus";
 import * as styles from "./DamQueueButtons.module.scss";
 
 interface Props {
@@ -20,11 +19,6 @@ const DamQueueButtons = ({ song }: Props) => {
     <div className={styles.container}>
       {song.vocalTypes.map((vocalType, i) => (
         <div className={styles.choice} key={`${vocalType}-${i}`}>
-          <MediaDownloadStatus
-            source="DAM"
-            songId={song.id}
-            suffix={i.toString()}
-          />
           <DamQueueButton
             song={song}
             streamingUrlIndex={i}

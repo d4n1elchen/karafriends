@@ -58,12 +58,14 @@ const NiconicoInfo = ({ videoId }: Props) => {
           <VideoMetadata
             videoSource="niconico"
             videoInfo={videoData.nicoVideoInfo}
+            titleAccessory={
+              <MediaDownloadStatus source="NICONICO" songId={videoId} compact />
+            }
           />
           <div className={styles.note}>
             ※ Note that Niconico videos tend to take longer to download. Please
             wait warmly until they are ready.
           </div>
-          <MediaDownloadStatus source="NICONICO" songId={videoId} />
           <NiconicoQueueButton
             videoId={videoId}
             videoInfo={videoData.nicoVideoInfo}

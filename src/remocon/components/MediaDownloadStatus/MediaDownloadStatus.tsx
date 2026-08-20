@@ -26,12 +26,18 @@ const mediaDownloadStatusQuery = graphql`
 `;
 
 interface Props {
+  compact?: boolean;
   source: MediaSource;
   songId: string;
   suffix?: string | null;
 }
 
-const MediaDownloadStatus = ({ source, songId, suffix = null }: Props) => {
+const MediaDownloadStatus = ({
+  compact = false,
+  source,
+  songId,
+  suffix = null,
+}: Props) => {
   const videoDownloadType = {
     JOYSOUND: 0,
     YOUTUBE: 1,
@@ -79,6 +85,7 @@ const MediaDownloadStatus = ({ source, songId, suffix = null }: Props) => {
     <DownloadBadge
       downloaded={data.mediaDownloaded}
       downloading={downloading}
+      compact={compact}
     />
   );
 };

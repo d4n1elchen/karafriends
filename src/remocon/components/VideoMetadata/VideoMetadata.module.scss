@@ -6,6 +6,13 @@
   font-weight: bold;
 }
 
+.titleRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .numbers {
   color: #999;
   display: flex;

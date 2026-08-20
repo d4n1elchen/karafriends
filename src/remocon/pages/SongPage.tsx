@@ -4,6 +4,8 @@ import { Link, useParams } from "react-router";
 
 import DamQueueButtons from "../components/DamQueueButtons";
 import { withLoader } from "../components/Loader";
+import MediaDownloadStatus from "../components/MediaDownloadStatus";
+import SongTitle from "../components/SongTitle";
 import { SongPageQuery } from "./__generated__/SongPageQuery.graphql";
 
 const songPageQuery = graphql`
@@ -35,7 +37,9 @@ const SongPage = () => {
 
   return (
     <div>
-      <h2>{song.name}</h2>
+      <SongTitle title={song.name}>
+        <MediaDownloadStatus source="DAM" songId={song.id} compact />
+      </SongTitle>
       <Link to={`/search/artist/${song.artistName}`}>{song.artistName}</Link>
       {!!song.tieUp && <span> • {song.tieUp}</span>}
       {!!song.lyricsPreview && (

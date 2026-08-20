@@ -62,6 +62,10 @@ export function isMediaDownloaded(
   songId: string,
   suffix: string | null,
 ): boolean {
+  if (source === "DAM" && suffix === null) {
+    return isAnyMediaDownloaded(source, songId);
+  }
+
   const requirements = getMediaCacheRequirements(
     TEMP_FOLDER,
     source,
@@ -203,7 +207,7 @@ export function getVideoDownloadProgress(
     (item) =>
       item.downloadType === downloadType &&
       item.songId === songId &&
-      item.suffix === suffix,
+      (item.suffix === suffix || (downloadType === 3 && suffix === null)),
   );
 
   if (downloadQueueItem) {

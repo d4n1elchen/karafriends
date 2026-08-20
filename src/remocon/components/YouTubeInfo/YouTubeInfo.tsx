@@ -81,13 +81,15 @@ const YouTubeInfo = ({ videoId }: Props) => {
           <VideoMetadata
             videoSource="youtube"
             videoInfo={videoData.youtubeVideoInfo}
+            titleAccessory={
+              <MediaDownloadStatus source="YOUTUBE" songId={videoId} compact />
+            }
           />
           <YouTubeLyricsForm
             videoInfo={videoData.youtubeVideoInfo}
             onSelectCaption={(language) => setSelectedCaption(language)}
             onAdhocLyricsChanged={(lyrics) => setAdhocSongLyrics(lyrics)}
           />
-          <MediaDownloadStatus source="YOUTUBE" songId={videoId} />
           <YouTubeQueueButton
             videoId={videoId}
             videoInfo={videoData.youtubeVideoInfo}

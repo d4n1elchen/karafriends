@@ -7,6 +7,8 @@ import JoysoundQueueButtons from "../components/JoysoundQueueButtons";
 import JoysoundYouTubeInfo from "../components/JoysoundYouTubeInfo";
 import { withLoader } from "../components/Loader";
 import SearchFormWrapper from "../components/SearchFormWrapper";
+import MediaDownloadStatus from "../components/MediaDownloadStatus";
+import SongTitle from "../components/SongTitle";
 import { JoysoundSongPageQuery } from "./__generated__/JoysoundSongPageQuery.graphql";
 
 import { getVideoId as getYoutubeVideoId } from "./YouTubePage";
@@ -73,7 +75,14 @@ const JoysoundSongPage = () => {
 
   return (
     <div>
-      <h2>{song.name}</h2>
+      <SongTitle title={song.name}>
+        <MediaDownloadStatus
+          source="JOYSOUND"
+          songId={song.id}
+          suffix={validatedYoutubeId || null}
+          compact
+        />
+      </SongTitle>
       <Link to={`/search/artist/${song.artistName}`}>{song.artistName}</Link>
       {!!song.tieUp && <span> • {song.tieUp}</span>}
       {!!song.lyricsPreview && (

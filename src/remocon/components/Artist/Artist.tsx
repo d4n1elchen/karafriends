@@ -33,6 +33,7 @@ const artistPaginationQuery = graphql`
             id
             name
             nameYomi
+            downloaded
           }
         }
       }

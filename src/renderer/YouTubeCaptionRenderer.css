@@ -17,27 +17,19 @@
   font-weight: 700;
   line-height: 1.18;
   text-align: center;
-  transition:
-    bottom 260ms ease,
-    opacity 260ms ease,
-    transform 260ms ease;
+  transition: opacity 180ms ease;
 }
 
-.youtubeCaptionCue-previous {
-  bottom: 38%;
-  transform: translateX(-50%) scale(0.92);
-  opacity: 0;
+.youtubeCaptionCue-upper {
+  bottom: 24%;
 }
 
-.youtubeCaptionCue-current {
-  bottom: 16%;
-  opacity: 1;
+.youtubeCaptionCue-lower {
+  bottom: 6%;
 }
 
-.youtubeCaptionCue-next {
-  bottom: 4%;
-  transform: translateX(-50%) scale(0.88);
-  opacity: 0.62;
+.youtubeCaptionCue-upcoming {
+  opacity: 0.72;
 }
 
 .youtubeCaptionLine {

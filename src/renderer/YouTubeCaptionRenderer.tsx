@@ -39,7 +39,7 @@ function findDisplayCue(cues: YouTubeCaptionCue[], timeMs: number) {
 
   const nextCue = cues[cueIndex + 1];
   if (nextCue && nextCue.startMs - timeMs <= UPCOMING_CUE_WINDOW_MS) {
-    return cueIndex + 1;
+    return cueIndex;
   }
 
   return timeMs - cue.endMs <= FINISHED_CUE_WINDOW_MS ? cueIndex : -1;
@@ -47,11 +47,16 @@ function findDisplayCue(cues: YouTubeCaptionCue[], timeMs: number) {
 
 function CaptionCue(props: {
   cue: YouTubeCaptionCue;
-  role: "previous" | "current" | "next";
+  lane: "upper" | "lower";
+  upcoming: boolean;
   timeMs: number;
 }) {
   return (
-    <div className={`youtubeCaptionCue youtubeCaptionCue-${props.role}`}>
+    <div
+      className={`youtubeCaptionCue youtubeCaptionCue-${props.lane} ${
+        props.upcoming ? "youtubeCaptionCue-upcoming" : ""
+      }`}
+    >
       {props.cue.lines.map((line, lineIndex) => (
         <div className="youtubeCaptionLine" key={lineIndex}>
           {line.segments.map((segment, segmentIndex) => (
@@ -131,25 +136,19 @@ function YouTubeCaptionRenderer(props: {
 
   return (
     <div className="youtubeCaptionDisplay" aria-live="off">
-      {cueIndex > 0 ? (
-        <CaptionCue
-          key={`cue-${cueIndex - 1}`}
-          cue={cues[cueIndex - 1]}
-          role="previous"
-          timeMs={timeMs}
-        />
-      ) : null}
       <CaptionCue
         key={`cue-${cueIndex}`}
         cue={cues[cueIndex]}
-        role="current"
+        lane={cueIndex % 2 === 0 ? "upper" : "lower"}
+        upcoming={false}
         timeMs={timeMs}
       />
       {cueIndex + 1 < cues.length ? (
         <CaptionCue
           key={`cue-${cueIndex + 1}`}
           cue={cues[cueIndex + 1]}
-          role="next"
+          lane={cueIndex % 2 === 0 ? "lower" : "upper"}
+          upcoming={true}
           timeMs={timeMs}
         />
       ) : null}

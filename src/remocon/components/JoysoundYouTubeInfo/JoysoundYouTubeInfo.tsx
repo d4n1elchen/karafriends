@@ -34,16 +34,16 @@ const joysoundYouTubeInfoVideoInfoQuery = graphql`
 
 interface Props {
   videoId: string;
-  setYoutubeVideoId: (videoId: string) => void;
+  onValidated: (videoId: string) => void;
 }
 
-const JoysoundYouTubeInfo = ({ videoId, setYoutubeVideoId }: Props) => {
+const JoysoundYouTubeInfo = ({ videoId, onValidated }: Props) => {
   const playerRef: React.MutableRefObject<ReturnType<
     typeof YouTubePlayer
   > | null> = useRef(null);
   const videoData = useLazyLoadQuery<JoysoundYouTubeInfoVideoInfoQuery>(
     joysoundYouTubeInfoVideoInfoQuery,
-    { videoId }
+    { videoId },
   );
 
   useEffect(() => {
@@ -60,7 +60,7 @@ const JoysoundYouTubeInfo = ({ videoId, setYoutubeVideoId }: Props) => {
       videoId &&
       videoData.youtubeVideoInfo.__typename === "YoutubeVideoInfo"
     ) {
-      setYoutubeVideoId(videoId);
+      onValidated(videoId);
     }
   }, [videoId]);
 

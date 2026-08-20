@@ -9,6 +9,7 @@ type Query {
     first: Int
     after: String
   ): JoysoundArtistConnection!
+  joysoundBackground(songId: String!): String
   joysoundSongDetail(id: String): JoysoundSong!
   joysoundSongsByArtist(
     artistId: String
@@ -73,6 +74,7 @@ type Mutation {
     tryHeadOfQueue: Boolean!
   ): QueueSongResult!
   removeSong(songId: String!, timestamp: String!): Boolean!
+  setJoysoundBackground(songId: String!, youtubeVideoId: String): Boolean!
   setPitchShiftSemis(semis: Int!): Boolean!
   setPlaybackState(playbackState: PlaybackState!): Boolean!
 }

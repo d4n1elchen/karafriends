@@ -33,6 +33,10 @@ import {
 } from "../common/adminAuthCore";
 import karafriendsConfig from "../common/config";
 import { debugError } from "../common/debug";
+import {
+  getJoysoundBackground,
+  setJoysoundBackground,
+} from "../common/joysoundBackgroundBindings";
 import { normalizeMediaCacheSuffix } from "../common/mediaCacheCore";
 import { getNiconicoMetadata } from "../common/niconicoMetadata";
 import { NiconicoSearchResult, searchNiconico } from "../common/niconicoSearch";
@@ -685,6 +689,8 @@ const resolvers = {
     ): string[] {
       return room.db.idToAdhocLyrics[args.id];
     },
+    joysoundBackground: (_: any, args: { songId: string }): string | null =>
+      getJoysoundBackground(args.songId),
     joysoundSongDetail: (
       _: any,
       args: { id: string },
@@ -1107,6 +1113,11 @@ const resolvers = {
       room.db.songQueue.some((item) => item.timestamp === args.timestamp),
   },
   Mutation: {
+    setJoysoundBackground: (
+      _: any,
+      args: { songId: string; youtubeVideoId: string | null },
+    ): boolean =>
+      setJoysoundBackground(args.songId, args.youtubeVideoId || null),
     sendEmote: (
       _: any,
       args: { emote: Emote },

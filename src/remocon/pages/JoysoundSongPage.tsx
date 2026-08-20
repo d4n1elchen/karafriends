@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { graphql, useLazyLoadQuery } from "react-relay";
+import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
 import { Link, useParams } from "react-router";
 
 import Button from "../components/Button";
@@ -10,6 +10,8 @@ import SearchFormWrapper from "../components/SearchFormWrapper";
 import MediaDownloadStatus from "../components/MediaDownloadStatus";
 import SongTitle from "../components/SongTitle";
 import { JoysoundSongPageQuery } from "./__generated__/JoysoundSongPageQuery.graphql";
+import { JoysoundSongPageBackgroundQuery } from "./__generated__/JoysoundSongPageBackgroundQuery.graphql";
+import { JoysoundSongPageSetBackgroundMutation } from "./__generated__/JoysoundSongPageSetBackgroundMutation.graphql";
 
 import { getVideoId as getYoutubeVideoId } from "./YouTubePage";
 
@@ -22,6 +24,21 @@ const joysoundSongPageQuery = graphql`
       lyricsPreview
       tieUp
     }
+  }
+`;
+
+const joysoundSongPageBackgroundQuery = graphql`
+  query JoysoundSongPageBackgroundQuery($songId: String!) {
+    joysoundBackground(songId: $songId)
+  }
+`;
+
+const joysoundSongPageSetBackgroundMutation = graphql`
+  mutation JoysoundSongPageSetBackgroundMutation(
+    $songId: String!
+    $youtubeVideoId: String
+  ) {
+    setJoysoundBackground(songId: $songId, youtubeVideoId: $youtubeVideoId)
   }
 `;
 
@@ -39,9 +56,17 @@ const JoysoundSongPage = () => {
   });
 
   const song = data.joysoundSongDetail;
+  const backgroundData = useLazyLoadQuery<JoysoundSongPageBackgroundQuery>(
+    joysoundSongPageBackgroundQuery,
+    { songId: song.id },
+    { fetchPolicy: "network-only" },
+  );
+  const [commitBackground] = useMutation<JoysoundSongPageSetBackgroundMutation>(
+    joysoundSongPageSetBackgroundMutation,
+  );
 
   const [youtubeVideoId, setYoutubeVideoId] = useState<string>(
-    params.youtubeVideoId || "",
+    params.youtubeVideoId || backgroundData.joysoundBackground || "",
   );
   const [validatedYoutubeId, setValidatedYoutubeVideoId] = useState<string>("");
   const [waitForVideoIdInput, setWaitForVideoIdInput] =
@@ -71,6 +96,20 @@ const JoysoundSongPage = () => {
     setValidatedYoutubeVideoId("");
 
     history.replaceState({}, "", `#/joysoundSong/${song.id}`);
+    commitBackground({
+      variables: { songId: song.id, youtubeVideoId: null },
+      onError: (error) =>
+        console.error("Failed to clear Joysound background binding", error),
+    });
+  };
+
+  const onYoutubeVideoValidated = (videoId: string) => {
+    setValidatedYoutubeVideoId(videoId);
+    commitBackground({
+      variables: { songId: song.id, youtubeVideoId: videoId },
+      onError: (error) =>
+        console.error("Failed to save Joysound background binding", error),
+    });
   };
 
   return (
@@ -123,7 +162,7 @@ const JoysoundSongPage = () => {
           {youtubeVideoId !== "" && (
             <JoysoundYouTubeInfo
               videoId={youtubeVideoId}
-              setYoutubeVideoId={setValidatedYoutubeVideoId}
+              onValidated={onYoutubeVideoValidated}
             />
           )}
         </>

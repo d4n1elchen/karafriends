@@ -14,6 +14,17 @@ export interface YouTubeCaptionCue {
   startMs: number;
 }
 
+interface Json3Segment {
+  tOffsetMs?: unknown;
+  utf8?: unknown;
+}
+
+interface Json3Event {
+  dDurationMs?: unknown;
+  segs?: unknown;
+  tStartMs?: unknown;
+}
+
 const TIMESTAMP_SOURCE = "(?:\\d{2}:)?\\d{2}:\\d{2}[.,]\\d{3}";
 const INLINE_TIMESTAMP = new RegExp(`<(${TIMESTAMP_SOURCE})>`, "g");
 const TIMING_LINE = new RegExp(
@@ -76,6 +87,19 @@ function appendSegment(
     if (index > 0) lines.push({ segments: [] });
     if (text.length > 0) {
       lines[lines.length - 1].segments.push({ ...segment, text });
+    }
+  });
+}
+
+function appendLines(
+  destination: YouTubeCaptionLine[],
+  source: YouTubeCaptionLine[],
+) {
+  source.forEach((line, index) => {
+    if (index === 0) {
+      destination[destination.length - 1].segments.push(...line.segments);
+    } else {
+      destination.push(line);
     }
   });
 }
@@ -235,4 +259,94 @@ export function parseWebVtt(rawVtt: string): YouTubeCaptionCue[] {
   });
 
   return cues.sort((left, right) => left.startMs - right.startMs);
+}
+
+export function parseYouTubeJson3(rawJson: string): YouTubeCaptionCue[] {
+  const data = JSON.parse(rawJson) as { events?: unknown };
+  if (!Array.isArray(data.events)) return [];
+
+  const events = data.events
+    .map((rawEvent) => rawEvent as Json3Event)
+    .filter(
+      (event) =>
+        typeof event.tStartMs === "number" &&
+        Number.isFinite(event.tStartMs) &&
+        Array.isArray(event.segs),
+    );
+
+  return events.flatMap((event, eventIndex) => {
+    const startMs = event.tStartMs as number;
+    const nextStartMs = events[eventIndex + 1]?.tStartMs;
+    const declaredDuration =
+      typeof event.dDurationMs === "number" &&
+      Number.isFinite(event.dDurationMs) &&
+      event.dDurationMs > 0
+        ? event.dDurationMs
+        : null;
+    const endMs = declaredDuration
+      ? startMs + declaredDuration
+      : typeof nextStartMs === "number" && nextStartMs > startMs
+        ? nextStartMs
+        : startMs + 2_000;
+    const segments = (event.segs as Json3Segment[]).filter(
+      (segment) => typeof segment.utf8 === "string",
+    );
+    const text = segments.map((segment) => segment.utf8 as string).join("");
+    if (text.trim().length === 0) return [];
+
+    const hasSegmentOffsets = segments.some(
+      (segment) =>
+        typeof segment.tOffsetMs === "number" &&
+        Number.isFinite(segment.tOffsetMs),
+    );
+    if (!hasSegmentOffsets) {
+      return [
+        {
+          endMs,
+          lines: approximateSegments(text.trim(), startMs, endMs),
+          startMs,
+        },
+      ];
+    }
+
+    const lines: YouTubeCaptionLine[] = [{ segments: [] }];
+    segments.forEach((segment, segmentIndex) => {
+      const offset =
+        typeof segment.tOffsetMs === "number" &&
+        Number.isFinite(segment.tOffsetMs)
+          ? segment.tOffsetMs
+          : 0;
+      const nextSegment = segments[segmentIndex + 1];
+      const nextOffset =
+        typeof nextSegment?.tOffsetMs === "number" &&
+        Number.isFinite(nextSegment.tOffsetMs)
+          ? nextSegment.tOffsetMs
+          : endMs - startMs;
+      const segmentStartMs = Math.min(
+        endMs,
+        Math.max(startMs, startMs + offset),
+      );
+      const segmentEndMs = Math.min(
+        endMs,
+        Math.max(segmentStartMs, startMs + nextOffset),
+      );
+
+      appendLines(
+        lines,
+        approximateSegments(
+          segment.utf8 as string,
+          segmentStartMs,
+          segmentEndMs,
+        ),
+      );
+    });
+
+    return [
+      {
+        endMs,
+        lines: lines.filter((line) => line.segments.length > 0),
+        startMs,
+      },
+    ];
+  });
 }

@@ -96,6 +96,9 @@ function Player(props: {
   const [youtubeCaptionUrl, setYoutubeCaptionUrl] = useState<string | null>(
     null,
   );
+  const [youtubeJson3CaptionUrl, setYoutubeJson3CaptionUrl] = useState<
+    string | null
+  >(null);
   const [customCaptionFailed, setCustomCaptionFailed] = useState(false);
   const { playbackState, setPlaybackState } = usePlaybackState();
   const { pitchShiftSemis, setPitchShiftSemis } = usePitchShiftSemis();
@@ -125,6 +128,7 @@ function Player(props: {
               trackRef.current.src = "";
             }
             setYoutubeCaptionUrl(null);
+            setYoutubeJson3CaptionUrl(null);
 
             setPitchShiftSemis(0);
 
@@ -288,6 +292,9 @@ function Player(props: {
 
                 if (popSong.hasCaptions) {
                   setYoutubeCaptionUrl(mediaUrl(`yt-${popSong.songId}.vtt`));
+                  setYoutubeJson3CaptionUrl(
+                    mediaUrl(`yt-${popSong.songId}.json3`),
+                  );
                 }
 
                 console.log(
@@ -420,10 +427,13 @@ function Player(props: {
           pitchShiftSemis={pitchShiftSemis}
         />
       ) : null}
-      {shouldUseCustomCaptions && youtubeCaptionUrl ? (
+      {shouldUseCustomCaptions &&
+      youtubeCaptionUrl &&
+      youtubeJson3CaptionUrl ? (
         <YouTubeCaptionRenderer
-          src={youtubeCaptionUrl}
+          json3Src={youtubeJson3CaptionUrl}
           videoRef={videoRef}
+          vttSrc={youtubeCaptionUrl}
           onError={(error) => {
             console.error(
               "Custom YouTube caption renderer failed; using native captions",

@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import "./YouTubeCaptionRenderer.css";
 import {
   parseWebVtt,
+  parseYouTubeJson3,
   YouTubeCaptionCue,
   YouTubeCaptionSegment,
 } from "./youtubeCaptions";
@@ -78,9 +79,10 @@ function CaptionCue(props: {
 }
 
 function YouTubeCaptionRenderer(props: {
+  json3Src: string;
   onError: (error: unknown) => void;
-  src: string;
   videoRef: React.RefObject<HTMLVideoElement | null>;
+  vttSrc: string;
 }) {
   const [cues, setCues] = useState<YouTubeCaptionCue[]>([]);
   const [timeMs, setTimeMs] = useState(0);
@@ -89,30 +91,57 @@ function YouTubeCaptionRenderer(props: {
     const abortController = new AbortController();
     setCues([]);
 
-    void fetch(props.src, { signal: abortController.signal })
-      .then((response) => {
-        if (!response.ok) {
+    const loadCaptions = async () => {
+      try {
+        const json3Response = await fetch(props.json3Src, {
+          signal: abortController.signal,
+        });
+        if (!json3Response.ok) {
           throw new Error(
-            `Caption request failed with HTTP ${response.status}`,
+            `JSON3 caption request failed with HTTP ${json3Response.status}`,
           );
         }
-        return response.text();
-      })
-      .then((vtt) => {
-        const parsedCues = parseWebVtt(vtt);
+
+        const parsedCues = parseYouTubeJson3(await json3Response.text());
         if (parsedCues.length === 0) {
-          throw new Error("The caption file did not contain any usable cues.");
+          throw new Error("The JSON3 file did not contain any usable cues.");
+        }
+        console.info(`Using JSON3 YouTube captions from ${props.json3Src}`);
+        setCues(parsedCues);
+        return;
+      } catch (json3Error) {
+        if (abortController.signal.aborted) return;
+        console.warn(
+          "Unable to use JSON3 captions; falling back to VTT",
+          json3Error,
+        );
+      }
+
+      try {
+        const response = await fetch(props.vttSrc, {
+          signal: abortController.signal,
+        });
+        if (!response.ok) {
+          throw new Error(
+            `VTT caption request failed with HTTP ${response.status}`,
+          );
+        }
+
+        const parsedCues = parseWebVtt(await response.text());
+        if (parsedCues.length === 0) {
+          throw new Error("The VTT file did not contain any usable cues.");
         }
         setCues(parsedCues);
-      })
-      .catch((error) => {
-        if (error instanceof DOMException && error.name === "AbortError")
-          return;
+      } catch (error) {
+        if (abortController.signal.aborted) return;
         props.onError(error);
-      });
+      }
+    };
+
+    void loadCaptions();
 
     return () => abortController.abort();
-  }, [props.src]);
+  }, [props.json3Src, props.vttSrc]);
 
   useEffect(() => {
     let animationFrame = 0;

@@ -1117,7 +1117,7 @@ function downloadYoutubeVideoImpl(
       finished = true;
 
       if (code === 0) {
-        safeRename(`${writeBasePath}.${captionCode}.json3`, json3Filename);
+        safeRename(`${videoFilename}.${captionCode}.json3`, json3Filename);
       } else {
         console.warn(
           `Unable to download optional JSON3 captions for ${videoId}: code=${code}, signal=${signal}; keeping VTT captions`,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { parseWebVtt } from "./youtubeCaptions.ts";
+import { parseWebVtt, parseYouTubeJson3 } from "./youtubeCaptions.ts";
 
 describe("parseWebVtt", () => {
   it("parses multiline cues and approximates character timing", () => {
@@ -85,5 +85,66 @@ Invalid`);
       cues[0].lines[0].segments.map(({ text }) => text).join(""),
       "Valid",
     );
+  });
+});
+
+describe("parseYouTubeJson3", () => {
+  it("parses cue timing and uses the weighted fallback without offsets", () => {
+    const [cue] = parseYouTubeJson3(
+      JSON.stringify({
+        events: [
+          {
+            tStartMs: 1000,
+            dDurationMs: 3000,
+            segs: [{ utf8: "Hi!" }],
+          },
+        ],
+      }),
+    );
+
+    assert.equal(cue.startMs, 1000);
+    assert.equal(cue.endMs, 4000);
+    assert.deepEqual(cue.lines[0].segments.at(-1), {
+      text: "!",
+      startMs: 4000,
+      endMs: 4000,
+    });
+  });
+
+  it("honors per-segment offsets when present", () => {
+    const [cue] = parseYouTubeJson3(
+      JSON.stringify({
+        events: [
+          {
+            tStartMs: 1000,
+            dDurationMs: 4000,
+            segs: [
+              { utf8: "Hello ", tOffsetMs: 0 },
+              { utf8: "world", tOffsetMs: 2500 },
+            ],
+          },
+        ],
+      }),
+    );
+    const world = cue.lines[0].segments.slice(-5);
+
+    assert.equal(world[0].startMs, 3500);
+    assert.equal(world.at(-1)?.endMs, 5000);
+    assert.equal(world.map(({ text }) => text).join(""), "world");
+  });
+
+  it("ignores metadata events and infers a missing duration", () => {
+    const cues = parseYouTubeJson3(
+      JSON.stringify({
+        events: [
+          { tStartMs: 0, dDurationMs: 100, wpWinPosId: 1 },
+          { tStartMs: 2000, segs: [{ utf8: "First" }] },
+          { tStartMs: 4500, dDurationMs: 1000, segs: [{ utf8: "Second" }] },
+        ],
+      }),
+    );
+
+    assert.equal(cues.length, 2);
+    assert.equal(cues[0].endMs, 4500);
   });
 });

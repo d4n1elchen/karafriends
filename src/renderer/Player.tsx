@@ -1,10 +1,7 @@
-import invariant from "ts-invariant";
-
 import Hls from "hls.js";
 
 import React, { useEffect, useRef, useState } from "react";
 import { commitMutation, fetchQuery, graphql } from "react-relay";
-import YoutubePlayer from "youtube-player";
 import { PlayerPopSongMutation } from "./__generated__/PlayerPopSongMutation.graphql";
 
 import environment from "../common/graphqlEnvironment";
@@ -13,11 +10,12 @@ import usePlaybackState from "../common/hooks/usePlaybackState";
 import { KuroshiroSingleton } from "../common/joysoundParser";
 import AdhocLyrics from "./AdhocLyrics";
 import JoysoundRenderer from "./JoysoundRenderer";
-import { InputDevice } from "./nativeAudio";
 import mediaUrl from "./mediaUrl";
+import { InputDevice } from "./nativeAudio";
 import PianoRoll from "./PianoRoll";
 import "./Player.css";
 import KarafriendsAudio from "./webAudio";
+import YouTubeCaptionRenderer from "./YouTubeCaptionRenderer";
 
 const popSongMutation = graphql`
   mutation PlayerPopSongMutation {
@@ -82,6 +80,7 @@ function Player(props: {
   mics: InputDevice[];
   kuroshiro: KuroshiroSingleton;
   audio: KarafriendsAudio;
+  youtubeKaraokeCaptions: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const trackRef = useRef<HTMLTrackElement>(null);
@@ -94,6 +93,10 @@ function Player(props: {
   const [shouldShowPianoRoll, setShouldShowPianoRoll] = useState<boolean>(true);
   const [shouldShowAdhocLyrics, setShouldShowAdhocLyrics] =
     useState<boolean>(false);
+  const [youtubeCaptionUrl, setYoutubeCaptionUrl] = useState<string | null>(
+    null,
+  );
+  const [customCaptionFailed, setCustomCaptionFailed] = useState(false);
   const { playbackState, setPlaybackState } = usePlaybackState();
   const { pitchShiftSemis, setPitchShiftSemis } = usePitchShiftSemis();
   const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -121,6 +124,7 @@ function Player(props: {
               trackRef.current.default = false;
               trackRef.current.src = "";
             }
+            setYoutubeCaptionUrl(null);
 
             setPitchShiftSemis(0);
 
@@ -282,9 +286,8 @@ function Player(props: {
 
                 videoRef.current.src = mediaUrl(`yt-${popSong.songId}.mp4`);
 
-                if (trackRef?.current && popSong?.hasCaptions) {
-                  trackRef.current.default = true;
-                  trackRef.current.src = mediaUrl(`yt-${popSong.songId}.vtt`);
+                if (popSong.hasCaptions) {
+                  setYoutubeCaptionUrl(mediaUrl(`yt-${popSong.songId}.vtt`));
                 }
 
                 console.log(
@@ -364,6 +367,26 @@ function Player(props: {
   }, [props.audio, pitchShiftSemis]);
 
   useEffect(() => {
+    setCustomCaptionFailed(false);
+  }, [props.youtubeKaraokeCaptions, youtubeCaptionUrl]);
+
+  const shouldUseCustomCaptions =
+    props.youtubeKaraokeCaptions &&
+    youtubeCaptionUrl !== null &&
+    !customCaptionFailed;
+
+  useEffect(() => {
+    if (!trackRef.current) return;
+
+    const shouldUseNativeCaptions =
+      youtubeCaptionUrl !== null && !shouldUseCustomCaptions;
+    trackRef.current.default = shouldUseNativeCaptions;
+    trackRef.current.track.mode = shouldUseNativeCaptions
+      ? "showing"
+      : "disabled";
+  }, [shouldUseCustomCaptions, youtubeCaptionUrl]);
+
+  useEffect(() => {
     if (!videoRef.current) return;
 
     if (audioCtx.current !== props.audio.audioContext) {
@@ -397,6 +420,19 @@ function Player(props: {
           pitchShiftSemis={pitchShiftSemis}
         />
       ) : null}
+      {shouldUseCustomCaptions && youtubeCaptionUrl ? (
+        <YouTubeCaptionRenderer
+          src={youtubeCaptionUrl}
+          videoRef={videoRef}
+          onError={(error) => {
+            console.error(
+              "Custom YouTube caption renderer failed; using native captions",
+              error,
+            );
+            setCustomCaptionFailed(true);
+          }}
+        />
+      ) : null}
       <video
         className="karaVid"
         ref={videoRef}
@@ -405,7 +441,7 @@ function Player(props: {
         controlsList="nodownload noplaybackrate"
         disablePictureInPicture
       >
-        <track ref={trackRef} kind="subtitles" src="" default />
+        <track ref={trackRef} kind="subtitles" src={youtubeCaptionUrl || ""} />
       </video>
       {shouldShowAdhocLyrics ? <AdhocLyrics /> : null}
     </div>

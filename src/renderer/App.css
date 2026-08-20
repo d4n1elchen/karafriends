@@ -84,6 +84,65 @@
   width: 100%;
 }
 
+.youtubeCaptionModeSetting {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  margin: 0.75rem 0 0.25rem;
+  padding: 0.6rem;
+  border: 1px solid #bdbdbd;
+  border-radius: 3px;
+  background: #fff;
+  color: #424242;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.youtubeCaptionModeSetting small {
+  display: block;
+  margin-top: 0.15rem;
+  color: #757575;
+  font-size: 0.7rem;
+}
+
+.youtubeCaptionModeSetting:focus-visible {
+  outline: 3px solid #26c6da;
+  outline-offset: 1px;
+}
+
+.youtubeCaptionModeIndicator {
+  position: relative;
+  flex: 0 0 2rem;
+  width: 2rem;
+  height: 1.1rem;
+  border-radius: 1rem;
+  background: #9e9e9e;
+  transition: background 160ms ease;
+}
+
+.youtubeCaptionModeIndicator::after {
+  position: absolute;
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  background: #fff;
+  content: "";
+  transition: transform 160ms ease;
+}
+
+.youtubeCaptionModeSettingEnabled .youtubeCaptionModeIndicator {
+  background: #26a69a;
+}
+
+.youtubeCaptionModeSettingEnabled .youtubeCaptionModeIndicator::after {
+  transform: translateX(0.9rem);
+}
+
 .microphoneSetting {
   margin-top: 0.75rem;
   text-align: left;

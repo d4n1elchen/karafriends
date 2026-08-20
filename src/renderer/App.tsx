@@ -43,6 +43,14 @@ function App(props: {
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [started, setStarted] = useState(window.karafriends.isDesktop);
+  const [youtubeKaraokeCaptions, _setYoutubeKaraokeCaptions] = useState(
+    () => localStorage.getItem("youtubeKaraokeCaptions") === "true",
+  );
+
+  const setYoutubeKaraokeCaptions = (enabled: boolean) => {
+    localStorage.setItem("youtubeKaraokeCaptions", enabled.toString());
+    _setYoutubeKaraokeCaptions(enabled);
+  };
 
   const setMics = (newMics: InputDevice[]) => {
     const micsToSave = newMics.map((mic) => ({
@@ -118,7 +126,12 @@ function App(props: {
     <div className="appMainContainer black">
       <div className="appPlayer valign-wrapper">
         {started ? (
-          <Player mics={mics} kuroshiro={props.kuroshiro} audio={props.audio} />
+          <Player
+            mics={mics}
+            kuroshiro={props.kuroshiro}
+            audio={props.audio}
+            youtubeKaraokeCaptions={youtubeKaraokeCaptions}
+          />
         ) : (
           <div className="browserStart center-align white-text">
             <h1>Karafriends</h1>
@@ -165,6 +178,28 @@ function App(props: {
               className="appSettings section center-align"
             >
               <HostnameSetting hostname={hostname} onChange={setHostname} />
+              <button
+                className={`youtubeCaptionModeSetting ${
+                  youtubeKaraokeCaptions
+                    ? "youtubeCaptionModeSettingEnabled"
+                    : ""
+                }`}
+                type="button"
+                role="switch"
+                aria-checked={youtubeKaraokeCaptions}
+                onClick={() =>
+                  setYoutubeKaraokeCaptions(!youtubeKaraokeCaptions)
+                }
+              >
+                <span
+                  className="youtubeCaptionModeIndicator"
+                  aria-hidden="true"
+                />
+                <span>
+                  Karaoke YouTube captions
+                  <small>Experimental</small>
+                </span>
+              </button>
               {mics.map((mic, i) => (
                 <MicrophoneSetting
                   key={mic.deviceId}

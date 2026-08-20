@@ -20,6 +20,23 @@ export interface NiconicoMetadata {
   viewCount: number;
 }
 
+export function isNiconicoMetadata(value: unknown): value is NiconicoMetadata {
+  if (!value || typeof value !== "object") return false;
+  const metadata = value as Partial<NiconicoMetadata>;
+  return (
+    typeof metadata.author === "string" &&
+    typeof metadata.channelId === "string" &&
+    typeof metadata.description === "string" &&
+    typeof metadata.lengthSeconds === "number" &&
+    Number.isFinite(metadata.lengthSeconds) &&
+    typeof metadata.thumbnailUrl === "string" &&
+    typeof metadata.title === "string" &&
+    metadata.title.length > 0 &&
+    typeof metadata.viewCount === "number" &&
+    Number.isFinite(metadata.viewCount)
+  );
+}
+
 export function parseNiconicoYtDlpMetadata(raw: string): NiconicoMetadata {
   const data = JSON.parse(raw) as YtDlpNiconicoMetadataJson;
   if (!data.title || typeof data.title !== "string") {

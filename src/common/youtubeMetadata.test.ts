@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { parseYtDlpMetadata } from "./youtubeMetadataCore.ts";
+import {
+  isYoutubeMetadata,
+  parseYtDlpMetadata,
+} from "./youtubeMetadataCore.ts";
 
 describe("parseYtDlpMetadata", () => {
   it("maps yt-dlp video metadata to the GraphQL shape", () => {
@@ -52,4 +55,9 @@ describe("parseYtDlpMetadata", () => {
       gainValue: 1,
     });
   });
+});
+
+it("validates normalized YouTube metadata before using a disk cache", () => {
+  assert.equal(isYoutubeMetadata(parseYtDlpMetadata('{"title":"Song"}')), true);
+  assert.equal(isYoutubeMetadata({ title: "Song" }), false);
 });

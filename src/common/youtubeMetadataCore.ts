@@ -26,6 +26,33 @@ export interface YoutubeMetadata {
   gainValue: number;
 }
 
+export function isYoutubeMetadata(value: unknown): value is YoutubeMetadata {
+  if (!value || typeof value !== "object") return false;
+  const metadata = value as Partial<YoutubeMetadata>;
+  return (
+    typeof metadata.author === "string" &&
+    Array.isArray(metadata.captionLanguages) &&
+    metadata.captionLanguages.every(
+      (language) =>
+        language &&
+        typeof language.code === "string" &&
+        typeof language.name === "string",
+    ) &&
+    typeof metadata.channelId === "string" &&
+    typeof metadata.description === "string" &&
+    Array.isArray(metadata.keywords) &&
+    metadata.keywords.every((keyword) => typeof keyword === "string") &&
+    typeof metadata.lengthSeconds === "number" &&
+    Number.isFinite(metadata.lengthSeconds) &&
+    typeof metadata.title === "string" &&
+    metadata.title.length > 0 &&
+    typeof metadata.viewCount === "number" &&
+    Number.isFinite(metadata.viewCount) &&
+    typeof metadata.gainValue === "number" &&
+    Number.isFinite(metadata.gainValue)
+  );
+}
+
 export function parseYtDlpMetadata(raw: string): YoutubeMetadata {
   const data = JSON.parse(raw) as YtDlpMetadataJson;
   if (!data.title || typeof data.title !== "string") {

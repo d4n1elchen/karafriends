@@ -2,13 +2,19 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 
 import { ensureExternalResources, getResourcePaths } from "./externalResources";
-import { parseYtDlpMetadata, YoutubeMetadata } from "./youtubeMetadataCore";
+import { readMetadataCache, writeMetadataCache } from "./metadataCache";
+import {
+  isYoutubeMetadata,
+  parseYtDlpMetadata,
+  YoutubeMetadata,
+} from "./youtubeMetadataCore";
 import { getYoutubeYtDlpArgs } from "./youtubeYtDlpArgs";
 
 const execFileAsync = promisify(execFile);
 const YOUTUBE_VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
 const YT_DLP_MAX_OUTPUT_BYTES = 5 * 1024 * 1024;
 const YT_DLP_TIMEOUT_MS = 30_000;
+const inFlightMetadataRequests = new Map<string, Promise<YoutubeMetadata>>();
 
 export async function getYoutubeMetadataWithYtDlp(
   videoId: string,
@@ -17,36 +23,71 @@ export async function getYoutubeMetadataWithYtDlp(
     throw new Error("Invalid YouTube video ID.");
   }
 
-  await ensureExternalResources();
-  const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  const runYtDlp = async (playerClient?: string) =>
-    execFileAsync(
-      getResourcePaths().ytdlp,
-      [
-        ...getYoutubeYtDlpArgs(playerClient),
-        "--dump-single-json",
-        "--skip-download",
-        "--no-playlist",
-        "--no-warnings",
-        "--",
-        videoUrl,
-      ],
-      {
-        maxBuffer: YT_DLP_MAX_OUTPUT_BYTES,
-        timeout: YT_DLP_TIMEOUT_MS,
-        windowsHide: true,
-      },
-    );
+  const cached = readMetadataCache("youtube", videoId, isYoutubeMetadata);
+  if (cached?.fresh) return cached.metadata;
 
-  let stdout: string;
+  const existingRequest = inFlightMetadataRequests.get(videoId);
+  if (existingRequest) return existingRequest;
+
+  const request = refreshYoutubeMetadata(videoId, cached?.metadata);
+  inFlightMetadataRequests.set(videoId, request);
   try {
-    ({ stdout } = await runYtDlp());
-  } catch (error) {
-    console.warn(
-      `Default yt-dlp clients failed for ${videoId}; retrying with web_embedded`,
-    );
-    ({ stdout } = await runYtDlp("web_embedded"));
+    return await request;
+  } finally {
+    inFlightMetadataRequests.delete(videoId);
   }
+}
 
-  return parseYtDlpMetadata(stdout);
+async function refreshYoutubeMetadata(
+  videoId: string,
+  staleMetadata?: YoutubeMetadata,
+): Promise<YoutubeMetadata> {
+  try {
+    await ensureExternalResources();
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const runYtDlp = async (playerClient?: string) =>
+      execFileAsync(
+        getResourcePaths().ytdlp,
+        [
+          ...getYoutubeYtDlpArgs(playerClient),
+          "--dump-single-json",
+          "--skip-download",
+          "--no-playlist",
+          "--no-warnings",
+          "--",
+          videoUrl,
+        ],
+        {
+          maxBuffer: YT_DLP_MAX_OUTPUT_BYTES,
+          timeout: YT_DLP_TIMEOUT_MS,
+          windowsHide: true,
+        },
+      );
+
+    let stdout: string;
+    try {
+      ({ stdout } = await runYtDlp());
+    } catch (error) {
+      console.warn(
+        `Default yt-dlp clients failed for ${videoId}; retrying with web_embedded`,
+      );
+      ({ stdout } = await runYtDlp("web_embedded"));
+    }
+
+    const metadata = parseYtDlpMetadata(stdout);
+    try {
+      writeMetadataCache("youtube", videoId, metadata);
+    } catch (error) {
+      console.warn(`Failed to cache YouTube metadata for ${videoId}:`, error);
+    }
+    return metadata;
+  } catch (error) {
+    if (staleMetadata) {
+      console.warn(
+        `Using stale cached YouTube metadata for ${videoId} after refresh failed`,
+      );
+      return staleMetadata;
+    }
+    throw error;
+  }
 }

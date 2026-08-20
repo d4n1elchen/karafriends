@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { parseNiconicoYtDlpMetadata } from "./niconicoMetadataCore.ts";
+import {
+  isNiconicoMetadata,
+  parseNiconicoYtDlpMetadata,
+} from "./niconicoMetadataCore.ts";
 
 describe("parseNiconicoYtDlpMetadata", () => {
   it("maps yt-dlp Niconico metadata to the GraphQL shape", () => {
@@ -41,4 +44,12 @@ describe("parseNiconicoYtDlpMetadata", () => {
       viewCount: 0,
     });
   });
+});
+
+it("validates normalized Niconico metadata before using a disk cache", () => {
+  assert.equal(
+    isNiconicoMetadata(parseNiconicoYtDlpMetadata('{"title":"Song"}')),
+    true,
+  );
+  assert.equal(isNiconicoMetadata({ title: "Song" }), false);
 });

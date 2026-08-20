@@ -1039,6 +1039,7 @@ function downloadYoutubeVideoImpl(
 
   const videoFilename = `${writeBasePath}.mp4`;
   const vttFilename = `${writeBasePath}.vtt`;
+  const json3Filename = `${writeBasePath}.json3`;
   const ytdlpLogFilename = `${writeBasePath}.log`;
 
   const tempFilename = `${videoFilename}.tmp`;
@@ -1072,7 +1073,7 @@ function downloadYoutubeVideoImpl(
   attachLogStreamErrorHandler(ytdlpLogStream, "yt-dlp");
 
   const captionArgs = captionCode
-    ? ["--write-subs", "--sub-langs", captionCode]
+    ? ["--write-subs", "--sub-langs", captionCode, "--sub-format", "vtt"]
     : [];
 
   const failDownload = (code: number | null, signal: NodeJS.Signals | null) => {
@@ -1098,6 +1099,64 @@ function downloadYoutubeVideoImpl(
     }
 
     onComplete();
+  };
+
+  const downloadJson3Captions = (
+    playerClient: string | undefined,
+    onFinished: () => void,
+  ) => {
+    if (!captionCode) {
+      onFinished();
+      return;
+    }
+
+    console.info(`Downloading JSON3 YouTube captions to ${json3Filename}`);
+    let finished = false;
+    const finishOnce = (code: number | null, signal: NodeJS.Signals | null) => {
+      if (finished) return;
+      finished = true;
+
+      if (code === 0) {
+        safeRename(`${writeBasePath}.${captionCode}.json3`, json3Filename);
+      } else {
+        console.warn(
+          `Unable to download optional JSON3 captions for ${videoId}: code=${code}, signal=${signal}; keeping VTT captions`,
+        );
+      }
+
+      onFinished();
+    };
+
+    const ytdlp = spawn(
+      resourcePaths.ytdlp,
+      [
+        ...getYoutubeYtDlpArgs(playerClient),
+        "--write-subs",
+        "--sub-langs",
+        captionCode,
+        "--sub-format",
+        "json3",
+        "--skip-download",
+        "-o",
+        videoFilename,
+        "--",
+        videoId,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+
+    invariant(ytdlp.stdout);
+    invariant(ytdlp.stderr);
+
+    ytdlp.stdout.pipe(process.stdout);
+    ytdlp.stdout.pipe(ytdlpLogStream, { end: false });
+    ytdlp.stderr.pipe(process.stderr);
+    ytdlp.stderr.pipe(ytdlpLogStream, { end: false });
+
+    handleProcessError(ytdlp, "yt-dlp (JSON3 captions)", () =>
+      finishOnce(null, null),
+    );
+    ytdlp.on("exit", finishOnce);
   };
 
   const runYtDlp = (useProgressiveFallback: boolean, playerClient?: string) => {
@@ -1140,8 +1199,10 @@ function downloadYoutubeVideoImpl(
 
     ytdlp.on("exit", (code, signal) => {
       if (code === 0) {
-        ytdlpLogStream.end();
-        finishDownload();
+        downloadJson3Captions(playerClient, () => {
+          ytdlpLogStream.end();
+          finishDownload();
+        });
         return;
       }
 

@@ -460,7 +460,10 @@ function hasMaxSongsInQueue(
   ).length;
 
   const songsDownloadingByUser: number = room.db.downloadQueue.filter(
-    (x) => x.userIdentity.deviceId === userIdentity.deviceId,
+    (x) =>
+      // DAM is already present in songQueue while its optional local cache is
+      // downloading, so counting it here would count the same request twice.
+      x.downloadType !== 3 && x.userIdentity.deviceId === userIdentity.deviceId,
   ).length;
 
   console.log(
@@ -1189,21 +1192,11 @@ const resolvers = {
         streamingUrl,
         queueItem.songId,
         mediaSuffix,
-        () => {
-          pushSongToQueue(room, queueItem, pushToHead);
-          publishMediaDownloadCompleted("DAM", queueItem.songId, mediaSuffix);
-        },
+        () =>
+          publishMediaDownloadCompleted("DAM", queueItem.songId, mediaSuffix),
       );
 
-      return {
-        __typename: "QueueSongInfo",
-        eta:
-          (room.db.currentSong?.playtime || 0) +
-          room.db.songQueue.reduce(
-            (acc, current) => acc + (current.playtime || 0),
-            0,
-          ),
-      };
+      return pushSongToQueue(room, queueItem, pushToHead);
     },
     queueYoutubeSong: (
       _: any,

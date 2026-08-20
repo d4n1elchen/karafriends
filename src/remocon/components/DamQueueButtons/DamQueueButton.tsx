@@ -1,13 +1,32 @@
-import formatDuration from "format-duration";
 import React, { useEffect, useState } from "react";
-import { graphql, useMutation } from "react-relay";
+import { fetchQuery, graphql, useMutation } from "react-relay";
+import { Subscription } from "relay-runtime";
+import { invariant } from "ts-invariant";
 
+import environment from "../../../common/graphqlEnvironment";
 import { SongPageQuery$data } from "../../pages/__generated__/SongPageQuery.graphql";
 import Button from "../Button";
+import { DamQueueButtonGetVideoDownloadProgressQuery } from "./__generated__/DamQueueButtonGetVideoDownloadProgressQuery.graphql";
 import {
   DamQueueButtonMutation,
   DamQueueButtonMutation$variables,
 } from "./__generated__/DamQueueButtonMutation.graphql";
+
+const damQueueButtonGetVideoDownloadProgressQuery = graphql`
+  query DamQueueButtonGetVideoDownloadProgressQuery(
+    $videoDownloadType: Int!
+    $songId: String!
+    $suffix: String
+  ) {
+    videoDownloadProgress(
+      videoDownloadType: $videoDownloadType
+      songId: $songId
+      suffix: $suffix
+    ) {
+      progress
+    }
+  }
+`;
 
 const damQueueButtonMutation = graphql`
   mutation DamQueueButtonMutation(
@@ -55,11 +74,49 @@ const DamQueueButton = ({ song, streamingUrlIndex, userIdentity }: Props) => {
   const [commit] = useMutation<DamQueueButtonMutation>(damQueueButtonMutation);
 
   useEffect(() => {
-    const timeout = setTimeout(() => setText(defaultText), 2500);
-    return () => clearTimeout(timeout);
-  });
+    invariant(window);
+
+    let intervalId: number | null = null;
+    let timeoutId: number | null = null;
+    let subscription: Subscription | null = null;
+
+    if (text === "Finished Downloading" || text.includes("Error")) {
+      timeoutId = window.setTimeout(() => setText(defaultText), 2500);
+    } else if (text !== defaultText && text !== "Waiting for server...") {
+      intervalId = window.setInterval(() => {
+        subscription = fetchQuery<DamQueueButtonGetVideoDownloadProgressQuery>(
+          environment,
+          damQueueButtonGetVideoDownloadProgressQuery,
+          {
+            videoDownloadType: 3,
+            songId: song.id,
+            suffix: streamingUrlIndex.toString(),
+          },
+        ).subscribe({
+          next: (data) => {
+            if (
+              data.videoDownloadProgress.progress === 1.0 ||
+              (text !== "Downloading" &&
+                data.videoDownloadProgress.progress === -1.0)
+            ) {
+              setText("Finished Downloading");
+            } else {
+              setText("Downloading...");
+            }
+          },
+        });
+      }, 1000);
+    }
+
+    return () => {
+      if (intervalId !== null) clearInterval(intervalId);
+      if (timeoutId !== null) clearTimeout(timeoutId);
+      subscription?.unsubscribe();
+    };
+  }, [defaultText, song.id, streamingUrlIndex, text]);
 
   const onClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    setText("Waiting for server...");
     console.log(`tryHeadOfQueue=${e.shiftKey}`);
     commit({
       variables: {
@@ -76,9 +133,7 @@ const DamQueueButton = ({ song, streamingUrlIndex, userIdentity }: Props) => {
       onCompleted: ({ queueDamSong }) => {
         switch (queueDamSong.__typename) {
           case "QueueSongInfo":
-            setText(
-              `Estimated wait: T-${formatDuration(queueDamSong.eta * 1000)}`
-            );
+            setText("Downloading");
             break;
           case "QueueSongError":
             setText(`Error: ${queueDamSong.reason}`);

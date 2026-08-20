@@ -77,3 +77,26 @@ export function getMediaCacheRequirements(
       return [path.join(mediaDirectory, `nico-${songId}.mp4`)];
   }
 }
+
+export function verifyMediaCacheRequirements(
+  mediaDirectory: string,
+  source: MediaSource,
+  songId: string,
+  suffix: string | number | null,
+  fileExists: (filename: string) => boolean,
+): { complete: boolean; requiredFiles: string[]; missingFiles: string[] } {
+  const requiredFiles = getMediaCacheRequirements(
+    mediaDirectory,
+    source,
+    songId,
+    suffix,
+  );
+  const missingFiles = requiredFiles.filter(
+    (filename) => !fileExists(filename),
+  );
+  return {
+    complete: requiredFiles.length > 0 && missingFiles.length === 0,
+    requiredFiles,
+    missingFiles,
+  };
+}

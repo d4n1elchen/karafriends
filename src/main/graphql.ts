@@ -1170,28 +1170,40 @@ const resolvers = {
       console.log(`queueDamSong: pushToHead=${pushToHead}`);
 
       console.log(`Starting offline download of ${queueItem.songId}`);
-      dataSources.minsei
+      // Media filenames and GraphQL cache arguments use a string suffix.
+      const mediaSuffix = normalizeMediaCacheSuffix(queueItem.streamingUrlIdx);
+      if (mediaSuffix === null) {
+        throw new Error("DAM streaming URL index is missing");
+      }
+      const streamingUrl = dataSources.minsei
         .getMusicStreamingUrls(queueItem.songId)
         .then((data) => {
           const selectedIndex = data.list[queueItem.streamingUrlIdx];
-          // Media filenames and GraphQL cache arguments use a string suffix.
-          // Normalize the Int input once so the completion event updates the
-          // exact Relay field displayed for this DAM vocal variant.
-          const mediaSuffix = normalizeMediaCacheSuffix(
-            queueItem.streamingUrlIdx,
-          );
-          if (mediaSuffix === null) {
-            throw new Error("DAM streaming URL index is missing");
-          }
-          const url = karafriendsConfig.useLowBitrateUrl
+          return karafriendsConfig.useLowBitrateUrl
             ? selectedIndex.lowBitrateUrl
             : selectedIndex.highBitrateUrl;
-          downloadDamVideo(url, queueItem.songId, mediaSuffix, () =>
-            publishMediaDownloadCompleted("DAM", queueItem.songId, mediaSuffix),
-          );
         });
+      downloadDamVideo(
+        room.db.downloadQueue,
+        queueItem.userIdentity,
+        streamingUrl,
+        queueItem.songId,
+        mediaSuffix,
+        () => {
+          pushSongToQueue(room, queueItem, pushToHead);
+          publishMediaDownloadCompleted("DAM", queueItem.songId, mediaSuffix);
+        },
+      );
 
-      return pushSongToQueue(room, queueItem, pushToHead);
+      return {
+        __typename: "QueueSongInfo",
+        eta:
+          (room.db.currentSong?.playtime || 0) +
+          room.db.songQueue.reduce(
+            (acc, current) => acc + (current.playtime || 0),
+            0,
+          ),
+      };
     },
     queueYoutubeSong: (
       _: any,

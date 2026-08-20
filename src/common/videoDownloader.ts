@@ -28,6 +28,7 @@ import {
   getMediaCacheRequirements,
   hasAnyMediaCache,
   MediaSource,
+  verifyMediaCacheRequirements,
 } from "./mediaCacheCore";
 
 export const TEMP_FOLDER: string =
@@ -101,11 +102,13 @@ function safeUnlink(filename: string): void {
   }
 }
 
-function safeRename(from: string, to: string): void {
+function safeRename(from: string, to: string): boolean {
   try {
     fs.renameSync(from, to);
+    return true;
   } catch (err) {
     console.error(`Failed to rename ${from} -> ${to}:`, err);
+    return false;
   }
 }
 
@@ -250,35 +253,61 @@ function failSharedDownload(item: DownloadQueueItem): void {
   sharedDownloads.fail(item);
 }
 
-const damDownloadWaiters = new Map<string, Array<() => void>>();
+function completeVerifiedDownload(
+  source: MediaSource,
+  songId: string,
+  suffix: string | null,
+  item: DownloadQueueItem,
+  result?: unknown,
+): boolean {
+  const verification = verifyMediaCacheRequirements(
+    TEMP_FOLDER,
+    source,
+    songId,
+    suffix,
+    fs.existsSync,
+  );
+  if (!verification.complete) {
+    console.error(
+      `Refusing to queue ${source} song ${songId}: required media output is missing${
+        verification.missingFiles.length > 0
+          ? ` (${verification.missingFiles.join(", ")})`
+          : ""
+      }`,
+    );
+    failSharedDownload(item);
+    return false;
+  }
+
+  completeSharedDownload(item, result);
+  return true;
+}
 
 export function downloadDamVideo(
-  m3u8Url: string,
+  downloadQueue: DownloadQueueItem[],
+  userIdentity: UserIdentity,
+  m3u8Url: string | Promise<string>,
   songId: string,
   suffix: string,
   onComplete: () => void,
 ): void {
-  const jobKey = `${songId}:${suffix}`;
-  const existingWaiters = damDownloadWaiters.get(jobKey);
-  if (existingWaiters) {
-    existingWaiters.push(onComplete);
-    return;
-  }
-  damDownloadWaiters.set(jobKey, [onComplete]);
+  const { isOwner, item: downloadQueueItem } = beginSharedDownload(
+    `dam:${songId}:${suffix}`,
+    downloadQueue,
+    3,
+    userIdentity,
+    songId,
+    suffix,
+    () => onComplete(),
+  );
+  if (!isOwner) return;
 
-  const completeAll = () => {
-    const waiters = damDownloadWaiters.get(jobKey) || [];
-    damDownloadWaiters.delete(jobKey);
-    for (const waiter of waiters) waiter();
-  };
-  const failAll = () => damDownloadWaiters.delete(jobKey);
-
-  ensureExternalResources()
-    .then(() =>
-      downloadDamVideoImpl(m3u8Url, songId, suffix, completeAll, failAll),
+  Promise.all([ensureExternalResources(), Promise.resolve(m3u8Url)])
+    .then(([, resolvedM3u8Url]) =>
+      downloadDamVideoImpl(resolvedM3u8Url, songId, suffix, downloadQueueItem),
     )
     .catch((err) => {
-      failAll();
+      failSharedDownload(downloadQueueItem);
       console.error(`Error preparing external resources: ${err}`);
     });
 }
@@ -287,8 +316,7 @@ function downloadDamVideoImpl(
   m3u8Url: string,
   songId: string,
   suffix: string,
-  onComplete: () => void,
-  onError: () => void,
+  downloadQueueItem: DownloadQueueItem,
 ): void {
   if (!fs.existsSync(TEMP_FOLDER)) {
     fs.mkdirSync(TEMP_FOLDER);
@@ -299,7 +327,7 @@ function downloadDamVideoImpl(
 
   if (fs.existsSync(filename)) {
     console.info(`${filename} already exists, not redownloading`);
-    onComplete();
+    completeVerifiedDownload("DAM", songId, suffix, downloadQueueItem);
     return;
   }
 
@@ -335,15 +363,18 @@ function downloadDamVideoImpl(
 
   handleProcessError(ffmpeg, "ffmpeg (DAM)", () => {
     safeUnlink(tempFilename);
-    onError();
+    failSharedDownload(downloadQueueItem);
   });
 
   ffmpeg.on("exit", (code, signal) => {
     if (code === 0) {
-      safeRename(tempFilename, filename);
-      onComplete();
+      if (!safeRename(tempFilename, filename)) {
+        failSharedDownload(downloadQueueItem);
+        return;
+      }
+      completeVerifiedDownload("DAM", songId, suffix, downloadQueueItem);
     } else {
-      onError();
+      failSharedDownload(downloadQueueItem);
       console.error(
         `Error downloading DAM video with ID ${songId}: code=${code}, signal=${signal}, log=${ffmpegLogFilename}`,
       );
@@ -535,7 +566,11 @@ function downloadJoysoundYoutubeVideoPromise(
     ytdlp.on("exit", (code, signal) => {
       if (code === 0) {
         safeUnlink(tempFilename);
-        safeRename(tempFilename + ".mp4", tempFilename);
+        if (!safeRename(tempFilename + ".mp4", tempFilename)) {
+          removeVideoDownloadFromQueue(downloadQueue, downloadQueueItem);
+          reject(new Error(`Unable to finalize Joysound video ${songId}`));
+          return;
+        }
 
         removeVideoDownloadFromQueue(downloadQueue, downloadQueueItem);
 
@@ -842,8 +877,23 @@ function padJoysoundVideoPromise(
 
         const onExit = (code: number, signal: number) => {
           if (code === 0) {
-            safeRename(videoFilename, videoTempFilename);
-            safeRename(videoOutFilename, videoFilename);
+            const backedUpOriginal = safeRename(
+              videoFilename,
+              videoTempFilename,
+            );
+            const installedOutput =
+              backedUpOriginal && safeRename(videoOutFilename, videoFilename);
+            if (!installedOutput) {
+              if (backedUpOriginal && !fs.existsSync(videoFilename)) {
+                safeRename(videoTempFilename, videoFilename);
+              }
+              reject(
+                new Error(
+                  `Unable to finalize padded Joysound video ${data.songId}`,
+                ),
+              );
+              return;
+            }
 
             safeUnlink(videoNoSoundFilename);
             safeUnlink(videoPadFrameFilename);
@@ -946,7 +996,10 @@ function downloadJoysoundDataImpl(
     if (fs.existsSync(telopFilename)) {
       try {
         const telopBuffer = fs.readFileSync(telopFilename);
-        completeSharedDownload(
+        completeVerifiedDownload(
+          "JOYSOUND",
+          songId,
+          queueItem.youtubeVideoId,
           downloadQueueItem,
           getJoysoundTelopDuration(telopBuffer),
         );
@@ -1050,10 +1103,23 @@ function downloadJoysoundDataImpl(
           data,
           videoFilename,
           ffmpegLogFilename,
-          () => completeSharedDownload(downloadQueueItem, playtime),
+          () =>
+            completeVerifiedDownload(
+              "JOYSOUND",
+              songId,
+              queueItem.youtubeVideoId,
+              downloadQueueItem,
+              playtime,
+            ),
         );
       } else {
-        completeSharedDownload(downloadQueueItem, playtime);
+        completeVerifiedDownload(
+          "JOYSOUND",
+          songId,
+          queueItem.youtubeVideoId,
+          downloadQueueItem,
+          playtime,
+        );
       }
     })
     .catch((err) => {
@@ -1157,7 +1223,7 @@ function downloadYoutubeVideoImpl(
   const finishDownload = () => {
     safeUnlink(tempFilename);
     youtubeCaptionRequests.delete(videoId);
-    completeSharedDownload(downloadQueueItem);
+    completeVerifiedDownload("YOUTUBE", videoId, null, downloadQueueItem);
   };
 
   const downloadJson3Captions = (
@@ -1458,7 +1524,7 @@ function downloadNicoVideoImpl(
     safeUnlink(tempFilename);
 
     if (code === 0) {
-      completeSharedDownload(downloadQueueItem);
+      completeVerifiedDownload("NICONICO", videoId, null, downloadQueueItem);
     } else {
       failSharedDownload(downloadQueueItem);
       console.error(

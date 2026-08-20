@@ -11,6 +11,11 @@ import { withLoader } from "../components/Loader";
 import SearchFormWrapper from "../components/SearchFormWrapper";
 import YouTubeInfo from "../components/YouTubeInfo";
 import YouTubeSearchResults from "../components/YouTubeSearchResults";
+import {
+  buildYoutubeSearchQuery,
+  parseYoutubeKaraokeKeyword,
+  YoutubeKaraokeKeyword,
+} from "../../common/youtubeKaraokeSearch";
 
 import { useNowPlayingQuery$data } from "../hooks/__generated__/useNowPlayingQuery.graphql";
 
@@ -54,6 +59,16 @@ type YouTubeParams = {
   videoId: string;
 };
 
+const KARAOKE_KEYWORD_STORAGE_KEY = "youtubeKaraokeKeyword";
+
+function storedKaraokeKeyword(): YoutubeKaraokeKeyword {
+  return (
+    parseYoutubeKaraokeKeyword(
+      localStorage.getItem(KARAOKE_KEYWORD_STORAGE_KEY),
+    ) || "none"
+  );
+}
+
 const YouTubePage = () => {
   const navigate = useNavigate();
   const { nickname } = useUserIdentity();
@@ -65,12 +80,33 @@ const YouTubePage = () => {
 
   const [videoId, setVideoId] = useState<string>(params.videoId || "");
   const [query, setQuery] = useState<string>(searchParams.get("query") || "");
+  const [karaokeKeyword, setKaraokeKeyword] = useState<YoutubeKaraokeKeyword>(
+    () => {
+      if (searchParams.has("query")) {
+        return (
+          parseYoutubeKaraokeKeyword(searchParams.get("karaoke")) || "none"
+        );
+      }
+      return storedKaraokeKeyword();
+    },
+  );
 
   useEffect(() => {
     const routeVideoId = params.videoId || "";
     setVideoId(routeVideoId);
     setQuery(routeVideoId ? "" : searchParams.get("query") || "");
+    setKaraokeKeyword(
+      searchParams.has("query")
+        ? parseYoutubeKaraokeKeyword(searchParams.get("karaoke")) || "none"
+        : storedKaraokeKeyword(),
+    );
   }, [params.videoId, searchParams]);
+
+  const onKaraokeKeywordChanged = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextKeyword = parseYoutubeKaraokeKeyword(e.target.value) || "none";
+    setKaraokeKeyword(nextKeyword);
+    localStorage.setItem(KARAOKE_KEYWORD_STORAGE_KEY, nextKeyword);
+  };
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,7 +120,11 @@ const YouTubePage = () => {
     } else if (input) {
       setVideoId("");
       setQuery(input);
-      navigate(`/search/youtube?query=${encodeURIComponent(input)}`, {
+      const nextSearchParams = new URLSearchParams({ query: input });
+      if (karaokeKeyword !== "none") {
+        nextSearchParams.set("karaoke", karaokeKeyword);
+      }
+      navigate(`/search/youtube?${nextSearchParams.toString()}`, {
         replace: true,
       });
     }
@@ -110,9 +150,27 @@ const YouTubePage = () => {
           placeholder="Song name, YouTube URL, or video ID"
           defaultValue={videoId || query}
         />
+        <label htmlFor="youtube-karaoke-keyword">Karaoke keyword</label>
+        <select
+          id="youtube-karaoke-keyword"
+          value={karaokeKeyword}
+          onChange={onKaraokeKeywordChanged}
+        >
+          <option value="none">None</option>
+          <option value="jp">Japanese — カラオケ</option>
+          <option value="en">English — karaoke</option>
+          <option value="zh">Chinese — 卡拉OK</option>
+        </select>
         <Button type="submit">Search</Button>
       </form>
-      {query !== "" && <YouTubeSearchResults query={query} />}
+      {query !== "" && (
+        <YouTubeSearchResults
+          query={buildYoutubeSearchQuery(
+            query,
+            parseYoutubeKaraokeKeyword(searchParams.get("karaoke")) || "none",
+          )}
+        />
+      )}
       {videoId !== "" && <YouTubeInfo videoId={videoId} />}
     </SearchFormWrapper>
   );

@@ -44,7 +44,7 @@ function App(props: {
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [started, setStarted] = useState(window.karafriends.isDesktop);
   const [youtubeKaraokeCaptions, _setYoutubeKaraokeCaptions] = useState(
-    () => localStorage.getItem("youtubeKaraokeCaptions") === "true",
+    () => localStorage.getItem("youtubeKaraokeCaptions") !== "false",
   );
 
   const setYoutubeKaraokeCaptions = (enabled: boolean) => {

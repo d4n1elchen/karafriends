@@ -236,9 +236,10 @@ export function downloadDamVideo(
   m3u8Url: string,
   songId: string,
   suffix: string,
+  onComplete: () => void,
 ): void {
   ensureExternalResources()
-    .then(() => downloadDamVideoImpl(m3u8Url, songId, suffix))
+    .then(() => downloadDamVideoImpl(m3u8Url, songId, suffix, onComplete))
     .catch((err) =>
       console.error(`Error preparing external resources: ${err}`),
     );
@@ -248,6 +249,7 @@ function downloadDamVideoImpl(
   m3u8Url: string,
   songId: string,
   suffix: string,
+  onComplete: () => void,
 ): void {
   if (!fs.existsSync(TEMP_FOLDER)) {
     fs.mkdirSync(TEMP_FOLDER);
@@ -258,6 +260,7 @@ function downloadDamVideoImpl(
 
   if (fs.existsSync(filename)) {
     console.info(`${filename} already exists, not redownloading`);
+    onComplete();
     return;
   }
 
@@ -296,6 +299,7 @@ function downloadDamVideoImpl(
   ffmpeg.on("exit", (code, signal) => {
     if (code === 0) {
       safeRename(tempFilename, filename);
+      onComplete();
     } else {
       console.error(
         `Error downloading DAM video with ID ${songId}: code=${code}, signal=${signal}, log=${ffmpegLogFilename}`,

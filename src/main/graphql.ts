@@ -327,6 +327,7 @@ enum SubscriptionEvent {
   CurrentSongAdhocLyricsChanged = "CurrentSongAdhocLyricsChanged",
   CurrentSongChanged = "CurrentSongChanged",
   Emote = "Emote",
+  MediaDownloadCompleted = "MediaDownloadCompleted",
   PitchShiftSemisChanged = "PitchShiftSemisChanged",
   PlaybackStateChanged = "PlaybackStateChanged",
   QueueAdded = "QueueAdded",
@@ -338,6 +339,17 @@ export interface RoomRuntime {
   db: RoomDatabase;
   dbPath: string;
   pubsub: PubSub;
+}
+
+function publishMediaDownloadCompleted(
+  room: RoomRuntime,
+  source: "DAM" | "JOYSOUND" | "YOUTUBE" | "NICONICO",
+  songId: string,
+  suffix: string | null = null,
+): void {
+  room.pubsub.publish(SubscriptionEvent.MediaDownloadCompleted, {
+    mediaDownloadCompleted: { source, songId, suffix },
+  });
 }
 
 function defaultDatabase(): RoomDatabase {
@@ -1098,7 +1110,20 @@ const resolvers = {
         dataSources.joysound,
         queueItem,
         pushToHead,
-        pushSongToQueue.bind(null, room),
+        (completedItem, completedPushToHead) => {
+          const result = pushSongToQueue(
+            room,
+            completedItem,
+            completedPushToHead,
+          );
+          publishMediaDownloadCompleted(
+            room,
+            "JOYSOUND",
+            completedItem.songId,
+            completedItem.youtubeVideoId,
+          );
+          return result;
+        },
       );
 
       return {
@@ -1139,7 +1164,18 @@ const resolvers = {
           const url = karafriendsConfig.useLowBitrateUrl
             ? selectedIndex.lowBitrateUrl
             : selectedIndex.highBitrateUrl;
-          downloadDamVideo(url, queueItem.songId, queueItem.streamingUrlIdx);
+          downloadDamVideo(
+            url,
+            queueItem.songId,
+            queueItem.streamingUrlIdx,
+            () =>
+              publishMediaDownloadCompleted(
+                room,
+                "DAM",
+                queueItem.songId,
+                queueItem.streamingUrlIdx,
+              ),
+          );
         });
 
       return pushSongToQueue(room, queueItem, pushToHead);
@@ -1179,7 +1215,11 @@ const resolvers = {
         queueItem.userIdentity,
         args.input.songId,
         args.input.captionCode,
-        pushSongToQueue.bind(null, room, queueItem, pushToHead),
+        () => {
+          const result = pushSongToQueue(room, queueItem, pushToHead);
+          publishMediaDownloadCompleted(room, "YOUTUBE", queueItem.songId);
+          return result;
+        },
       );
 
       // The song likely hasn't actually been added to the queue yet since it needs to download,
@@ -1216,7 +1256,11 @@ const resolvers = {
         room.db.downloadQueue,
         queueItem.userIdentity,
         args.input.songId,
-        pushSongToQueue.bind(null, room, queueItem, pushToHead),
+        () => {
+          const result = pushSongToQueue(room, queueItem, pushToHead);
+          publishMediaDownloadCompleted(room, "NICONICO", queueItem.songId);
+          return result;
+        },
       );
       // The song likely hasn't actually been added to the queue yet since it needs to download,
       // but let's optimistically return the eta assuming it will successfully queue
@@ -1351,6 +1395,12 @@ const resolvers = {
     emote: {
       subscribe: (_: any, __: any, { room }: IGraphQLContext) =>
         room.pubsub.asyncIterableIterator([SubscriptionEvent.Emote]),
+    },
+    mediaDownloadCompleted: {
+      subscribe: (_: any, __: any, { room }: IGraphQLContext) =>
+        room.pubsub.asyncIterableIterator([
+          SubscriptionEvent.MediaDownloadCompleted,
+        ]),
     },
     pitchShiftSemisChanged: {
       subscribe: (_: any, __: any, { room }: IGraphQLContext) =>

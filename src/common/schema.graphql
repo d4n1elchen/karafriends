@@ -80,10 +80,17 @@ type Subscription {
   currentSongAdhocLyricsChanged: [AdhocLyricsEntry!]!
   currentSongChanged: QueueItem
   emote: Emote!
+  mediaDownloadCompleted: MediaDownloadCompleted!
   pitchShiftSemisChanged: Int!
   playbackStateChanged: PlaybackState!
   queueAdded: QueueItem!
   queueChanged: SubscriptionQueueChanged!
+}
+
+type MediaDownloadCompleted {
+  source: MediaSource!
+  songId: String!
+  suffix: String
 }
 
 type SubscriptionQueueChanged {

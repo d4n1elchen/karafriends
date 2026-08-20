@@ -2,6 +2,7 @@ import React from "react";
 import { graphql, useLazyLoadQuery } from "react-relay";
 
 import { MediaDownloadStatusQuery } from "./__generated__/MediaDownloadStatusQuery.graphql";
+import { MediaSource } from "../../mediaDownloadCache";
 import DownloadBadge from "./DownloadBadge";
 
 const mediaDownloadStatusQuery = graphql`
@@ -15,7 +16,7 @@ const mediaDownloadStatusQuery = graphql`
 `;
 
 interface Props {
-  source: "DAM" | "JOYSOUND" | "YOUTUBE" | "NICONICO";
+  source: MediaSource;
   songId: string;
   suffix?: string | null;
 }

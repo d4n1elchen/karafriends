@@ -4,6 +4,7 @@ import { HashRouter, Route, Routes } from "react-router";
 import Button from "./components/Button";
 import ControlBar from "./components/ControlBar";
 import NavBar from "./components/NavBar";
+import useMediaDownloadUpdates from "./hooks/useMediaDownloadUpdates";
 import useUserIdentity from "./hooks/useUserIdentity";
 import AdhocLyricsPage from "./pages/AdhocLyricsPage";
 import ArtistPage from "./pages/ArtistPage";
@@ -28,6 +29,7 @@ const App = () => {
     () => localStorage.getItem("nickname") || "",
   );
   useQueueNotifications(deviceId);
+  useMediaDownloadUpdates();
 
   const resetNickname = () => {
     localStorage.removeItem("nickname");

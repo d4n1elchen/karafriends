@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   getMediaCacheRequirements,
   hasAnyMediaCache,
+  normalizeMediaCacheSuffix,
 } from "./mediaCacheCore.ts";
 
 const mediaDirectory = path.join("data", "media");
@@ -38,10 +39,14 @@ test("Joysound requires its selected video and telop", () => {
 });
 
 test("DAM and Niconico use their source-specific MP4 cache keys", () => {
+  assert.equal(normalizeMediaCacheSuffix(1), "1");
   assert.deepEqual(
     getMediaCacheRequirements(mediaDirectory, "DAM", "42", "1"),
     [path.join(mediaDirectory, "42-1.mp4")],
   );
+  assert.deepEqual(getMediaCacheRequirements(mediaDirectory, "DAM", "42", 1), [
+    path.join(mediaDirectory, "42-1.mp4"),
+  ]);
   assert.deepEqual(
     getMediaCacheRequirements(mediaDirectory, "NICONICO", "sm9", null),
     [path.join(mediaDirectory, "nico-sm9.mp4")],

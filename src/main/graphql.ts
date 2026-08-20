@@ -33,6 +33,7 @@ import {
 } from "../common/adminAuthCore";
 import karafriendsConfig from "../common/config";
 import { debugError } from "../common/debug";
+import { normalizeMediaCacheSuffix } from "../common/mediaCacheCore";
 import { getNiconicoMetadata } from "../common/niconicoMetadata";
 import { NiconicoSearchResult, searchNiconico } from "../common/niconicoSearch";
 import { normalizeRoomId } from "../common/roomIdCore";
@@ -200,7 +201,7 @@ export interface JoysoundQueueItem extends QueueItemInterface {
 
 interface DamQueueItem extends QueueItemInterface {
   readonly __typename: "DamQueueItem";
-  readonly streamingUrlIdx: string;
+  readonly streamingUrlIdx: number;
 }
 
 interface YoutubeQueueItem extends QueueItemInterface {
@@ -240,7 +241,7 @@ type QueueDamSongInput = {
   readonly name: string;
   readonly artistName: string;
   readonly playtime?: number | null;
-  readonly streamingUrlIdx: string;
+  readonly streamingUrlIdx: number;
   readonly userIdentity: UserIdentity;
 };
 
@@ -1172,21 +1173,21 @@ const resolvers = {
       dataSources.minsei
         .getMusicStreamingUrls(queueItem.songId)
         .then((data) => {
-          // XXX: This should be already be a number but typescript tells me it is not
-          const selectedIndex = data.list[+queueItem.streamingUrlIdx];
+          const selectedIndex = data.list[queueItem.streamingUrlIdx];
+          // Media filenames and GraphQL cache arguments use a string suffix.
+          // Normalize the Int input once so the completion event updates the
+          // exact Relay field displayed for this DAM vocal variant.
+          const mediaSuffix = normalizeMediaCacheSuffix(
+            queueItem.streamingUrlIdx,
+          );
+          if (mediaSuffix === null) {
+            throw new Error("DAM streaming URL index is missing");
+          }
           const url = karafriendsConfig.useLowBitrateUrl
             ? selectedIndex.lowBitrateUrl
             : selectedIndex.highBitrateUrl;
-          downloadDamVideo(
-            url,
-            queueItem.songId,
-            queueItem.streamingUrlIdx,
-            () =>
-              publishMediaDownloadCompleted(
-                "DAM",
-                queueItem.songId,
-                queueItem.streamingUrlIdx,
-              ),
+          downloadDamVideo(url, queueItem.songId, mediaSuffix, () =>
+            publishMediaDownloadCompleted("DAM", queueItem.songId, mediaSuffix),
           );
         });
 

@@ -4,6 +4,14 @@ export type MediaSource = "DAM" | "JOYSOUND" | "YOUTUBE" | "NICONICO";
 
 const safeCacheKey = /^[A-Za-z0-9_-]+$/;
 
+export function normalizeMediaCacheSuffix(
+  suffix: string | number | null | undefined,
+): string | null {
+  return suffix === null || suffix === undefined || suffix === ""
+    ? null
+    : String(suffix);
+}
+
 export function hasAnyMediaCache(
   filenames: string[],
   source: MediaSource,
@@ -37,10 +45,9 @@ export function getMediaCacheRequirements(
   mediaDirectory: string,
   source: MediaSource,
   songId: string,
-  suffix: string | null,
+  suffix: string | number | null,
 ): string[] {
-  const normalizedSuffix =
-    source === "JOYSOUND" && suffix === "" ? null : suffix;
+  const normalizedSuffix = normalizeMediaCacheSuffix(suffix);
 
   if (!safeCacheKey.test(songId)) {
     return [];

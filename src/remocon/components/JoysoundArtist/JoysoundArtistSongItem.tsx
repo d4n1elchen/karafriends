@@ -10,9 +10,12 @@ type Props =
 
 const JoysoundArtistSongItem = ({ id, name, downloaded }: Props) => (
   <Link to={`/joysoundSong/${id}`}>
-    <ListItem>
+    <ListItem
+      cornerAccessory={
+        downloaded ? <DownloadBadge downloaded compact /> : undefined
+      }
+    >
       <strong>{name}</strong>
-      <DownloadBadge downloaded={downloaded} hideWhenMissing />
     </ListItem>
   </Link>
 );

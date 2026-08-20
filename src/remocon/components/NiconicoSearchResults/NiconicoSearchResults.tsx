@@ -56,7 +56,13 @@ const NiconicoSearchResults = ({ query }: Props) => {
     <List>
       {data.niconicoSearch.results.map((video) => (
         <Link key={video.videoId} to={`/search/niconico/${video.videoId}`}>
-          <ListItem>
+          <ListItem
+            cornerAccessory={
+              video.downloaded ? (
+                <DownloadBadge downloaded compact />
+              ) : undefined
+            }
+          >
             <div className={styles.result}>
               {video.thumbnailUrl && (
                 <img
@@ -71,7 +77,6 @@ const NiconicoSearchResults = ({ query }: Props) => {
                   {formatDuration(video.lengthSeconds)} · {video.viewCount}{" "}
                   views
                 </span>
-                <DownloadBadge downloaded={video.downloaded} hideWhenMissing />
               </div>
             </div>
           </ListItem>

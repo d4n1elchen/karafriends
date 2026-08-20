@@ -6,9 +6,20 @@
 }
 
 .listItem {
+  position: relative;
   padding: 8px;
   box-shadow: 0 0 4px #ccc;
   border-radius: 4px;
   overflow: hidden;
   overflow-wrap: anywhere;
+}
+
+.hasCornerAccessory {
+  padding-right: 8rem;
+}
+
+.cornerAccessory {
+  position: absolute;
+  top: 8px;
+  right: 8px;
 }

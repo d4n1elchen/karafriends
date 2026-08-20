@@ -50,7 +50,13 @@ const YouTubeSearchResults = ({ query }: Props) => {
     <List>
       {data.youtubeSearch.results.map((video) => (
         <Link key={video.videoId} to={`/search/youtube/${video.videoId}`}>
-          <ListItem>
+          <ListItem
+            cornerAccessory={
+              video.downloaded ? (
+                <DownloadBadge downloaded compact />
+              ) : undefined
+            }
+          >
             <div className={styles.result}>
               {video.thumbnailUrl && (
                 <img
@@ -65,7 +71,6 @@ const YouTubeSearchResults = ({ query }: Props) => {
                 {video.duration && (
                   <span className={styles.duration}>{video.duration}</span>
                 )}
-                <DownloadBadge downloaded={video.downloaded} hideWhenMissing />
               </div>
             </div>
           </ListItem>

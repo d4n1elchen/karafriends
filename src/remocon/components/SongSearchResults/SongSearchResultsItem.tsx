@@ -18,14 +18,17 @@ const SongSearchResultsItem = ({
   downloaded,
 }: Props) => (
   <Link to={`/song/${id}`}>
-    <ListItem>
+    <ListItem
+      cornerAccessory={
+        downloaded ? <DownloadBadge downloaded compact /> : undefined
+      }
+    >
       <div>
         <WeebText bold text={name} yomi={nameYomi} />
       </div>
       <div>
         <WeebText text={artistName} yomi={artistNameYomi} />
       </div>
-      <DownloadBadge downloaded={downloaded} hideWhenMissing />
     </ListItem>
   </Link>
 );

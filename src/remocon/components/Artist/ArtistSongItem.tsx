@@ -10,9 +10,12 @@ type Props = Artist_artistById$data["artistById"]["songs"]["edges"][0]["node"];
 
 const ArtistSongItem = ({ id, name, nameYomi, downloaded }: Props) => (
   <Link to={`/song/${id}`}>
-    <ListItem>
+    <ListItem
+      cornerAccessory={
+        downloaded ? <DownloadBadge downloaded compact /> : undefined
+      }
+    >
       <WeebText bold text={name} yomi={nameYomi} />
-      <DownloadBadge downloaded={downloaded} hideWhenMissing />
     </ListItem>
   </Link>
 );

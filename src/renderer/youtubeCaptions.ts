@@ -19,6 +19,11 @@ const INLINE_TIMESTAMP = new RegExp(`<(${TIMESTAMP_SOURCE})>`, "g");
 const TIMING_LINE = new RegExp(
   `^(${TIMESTAMP_SOURCE})\\s+-->\\s+(${TIMESTAMP_SOURCE})(?:\\s+.*)?$`,
 );
+const ZERO_DURATION_PUNCTUATION = new Set(
+  Array.from(
+    "。、，．！？：；…‥・「」『』【】（）［］｛｝〈〉《》〔〕〜～“”‘’«»‹›—–♪",
+  ),
+);
 
 function parseTimestamp(value: string): number {
   const parts = value.replace(",", ".").split(":");
@@ -75,6 +80,33 @@ function appendSegment(
   });
 }
 
+function characterTimingWeight(character: string): number {
+  if (/\s/.test(character)) return 0;
+
+  const codePoint = character.codePointAt(0) || 0;
+  const isAsciiPunctuation =
+    (codePoint >= 0x21 && codePoint <= 0x2f) ||
+    (codePoint >= 0x3a && codePoint <= 0x40) ||
+    (codePoint >= 0x5b && codePoint <= 0x60) ||
+    (codePoint >= 0x7b && codePoint <= 0x7e);
+  const isFullWidthPunctuation =
+    (codePoint >= 0xff01 && codePoint <= 0xff0f) ||
+    (codePoint >= 0xff1a && codePoint <= 0xff20) ||
+    (codePoint >= 0xff3b && codePoint <= 0xff40) ||
+    (codePoint >= 0xff5b && codePoint <= 0xff65);
+  const isCombiningMark =
+    (codePoint >= 0x0300 && codePoint <= 0x036f) ||
+    (codePoint >= 0x3099 && codePoint <= 0x309a) ||
+    (codePoint >= 0xfe00 && codePoint <= 0xfe0f);
+
+  return isAsciiPunctuation ||
+    isFullWidthPunctuation ||
+    isCombiningMark ||
+    ZERO_DURATION_PUNCTUATION.has(character)
+    ? 0
+    : 1;
+}
+
 function approximateSegments(
   text: string,
   startMs: number,
@@ -82,11 +114,13 @@ function approximateSegments(
 ): YouTubeCaptionLine[] {
   const lines: YouTubeCaptionLine[] = [{ segments: [] }];
   const characters = Array.from(text);
-  const timedCharacterCount = characters.filter(
-    (character) => character !== "\n",
-  ).length;
+  const totalTimingWeight = characters.reduce(
+    (total, character) => total + characterTimingWeight(character),
+    0,
+  );
+  const timingDivisor = Math.max(1, totalTimingWeight);
   const duration = Math.max(1, endMs - startMs);
-  let characterIndex = 0;
+  let elapsedTimingWeight = 0;
 
   characters.forEach((character) => {
     if (character === "\n") {
@@ -94,17 +128,28 @@ function approximateSegments(
       return;
     }
 
+    const timingWeight = characterTimingWeight(character);
     const segmentStart =
-      startMs + (duration * characterIndex) / timedCharacterCount;
-    characterIndex += 1;
+      startMs + (duration * elapsedTimingWeight) / timingDivisor;
+    elapsedTimingWeight += timingWeight;
     const segmentEnd =
-      startMs + (duration * characterIndex) / timedCharacterCount;
+      startMs + (duration * elapsedTimingWeight) / timingDivisor;
     lines[lines.length - 1].segments.push({
       endMs: segmentEnd,
       startMs: segmentStart,
       text: character,
     });
   });
+
+  // A punctuation-only cue still needs a finite display interval.
+  if (totalTimingWeight === 0) {
+    lines.forEach((line) =>
+      line.segments.forEach((segment) => {
+        segment.startMs = startMs;
+        segment.endMs = endMs;
+      }),
+    );
+  }
 
   return lines.filter((line) => line.segments.length > 0);
 }

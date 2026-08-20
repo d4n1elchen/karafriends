@@ -35,6 +35,38 @@ you`);
     ]);
   });
 
+  it("does not spend fallback timing on punctuation or whitespace", () => {
+    const [cue] = parseWebVtt(`WEBVTT
+
+00:00:01.000 --> 00:00:06.000
+Hi, you!`);
+    const segments = cue.lines[0].segments;
+    const comma = segments.find(({ text }) => text === ",");
+    const space = segments.find(({ text }) => text === " ");
+    const exclamation = segments.find(({ text }) => text === "!");
+
+    assert.deepEqual(comma, { text: ",", startMs: 3000, endMs: 3000 });
+    assert.deepEqual(space, { text: " ", startMs: 3000, endMs: 3000 });
+    assert.deepEqual(exclamation, {
+      text: "!",
+      startMs: 6000,
+      endMs: 6000,
+    });
+  });
+
+  it("keeps punctuation-only cues visible for their full interval", () => {
+    const [cue] = parseWebVtt(`WEBVTT
+
+00:00:02.000 --> 00:00:03.000
+...`);
+
+    assert.ok(
+      cue.lines[0].segments.every(
+        ({ startMs, endMs }) => startMs === 2000 && endMs === 3000,
+      ),
+    );
+  });
+
   it("ignores headers, identifiers, notes, and invalid cues", () => {
     const cues = parseWebVtt(`WEBVTT - generated
 

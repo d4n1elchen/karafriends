@@ -305,7 +305,7 @@ app.get("/", (req, res) => {
             <input id="room-id" name="roomId" type="text" maxlength="32" pattern="[A-Za-z0-9-]{1,32}" autocomplete="off" placeholder="friday-karaoke">
             <span class="hint">Letters, numbers, and hyphens; up to 32 characters.</span>
             <button type="submit">Create or open room</button>
-            <button class="secondary" type="submit" formnovalidate data-random>Create a random room</button>
+            <button class="secondary" type="button" data-random>Generate a random ID</button>
           </form>
           <section class="recent" aria-labelledby="recent-title">
             <h2 id="recent-title">Recent rooms</h2>
@@ -330,7 +330,7 @@ app.get("/", (req, res) => {
         } catch {}
 
         if (rooms.length) {
-          list.replaceChildren(...rooms.slice(0, 8).map((room) => {
+          list.replaceChildren(...rooms.slice(0, 5).map((room) => {
             const link = document.createElement("a");
             link.className = "recent-room";
             link.href = "/renderer/?room=" + encodeURIComponent(room);
@@ -343,8 +343,29 @@ app.get("/", (req, res) => {
           }));
         }
 
+        const adjectives = [
+          "bright", "calm", "cosmic", "crimson", "dancing", "electric",
+          "flying", "golden", "happy", "hidden", "lucky", "midnight",
+          "neon", "quiet", "rapid", "silver", "singing", "sparkling",
+          "sunny", "velvet"
+        ];
+        const nouns = [
+          "bamboo", "comet", "dragon", "echo", "festival", "firefly",
+          "fox", "galaxy", "lantern", "lotus", "melody", "moon",
+          "panda", "phoenix", "river", "star", "tiger", "wave",
+          "willow", "zen"
+        ];
+        const randomItem = (items) => {
+          const value = new Uint32Array(1);
+          crypto.getRandomValues(value);
+          return items[value[0] % items.length];
+        };
+
         document.querySelector("[data-random]").addEventListener("click", () => {
-          document.getElementById("room-id").value = "";
+          const input = document.getElementById("room-id");
+          input.value = randomItem(adjectives) + "-" + randomItem(nouns);
+          input.focus();
+          input.select();
         });
       })();
     </script>

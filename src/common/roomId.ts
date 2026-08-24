@@ -3,7 +3,7 @@ import { normalizeRoomId } from "./roomIdCore";
 const ROOM_STORAGE_KEY = "karafriends.roomId";
 const RECENT_ROOMS_STORAGE_KEY = "karafriends.recentRooms";
 const REMOTE_TOKEN_STORAGE_KEY = "karafriends.remoteToken";
-const MAX_RECENT_ROOMS = 8;
+const MAX_RECENT_ROOMS = 5;
 
 function rememberRoom(roomId: string): void {
   let recentRooms: string[] = [];

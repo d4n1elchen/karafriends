@@ -19,6 +19,7 @@ import {
   getJoysoundOggPlaytime,
   getJoysoundTelopDuration,
 } from "./joysoundMediaMetadata";
+import { getYoutubeMediaFormatArgs } from "./youtubeMediaFormat";
 import { getWebDataDirectory, isElectronRuntime } from "./runtimePaths";
 import { SharedDownloadCoordinator } from "./sharedDownloadCore";
 import { getNiconicoYtDlpDownloadArgs } from "./niconicoYtDlpArgs";
@@ -622,8 +623,19 @@ function composeJoysoundVideoPromise(
       tempFilename,
       "-i",
       "-",
-      "-c",
-      "copy",
+      // Safari on iPad does not support Joysound's Vorbis audio in an MP4,
+      // and YouTube backgrounds may be AV1. Produce the same broadly
+      // compatible codec combination used by DAM and Niconico.
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-pix_fmt",
+      "yuv420p",
+      "-c:a",
+      "aac",
+      "-ac",
+      "2",
       "-shortest",
       "-movflags",
       "faststart",
@@ -1362,9 +1374,7 @@ function downloadYoutubeVideoImpl(
   };
 
   const runYtDlp = (useProgressiveFallback: boolean, playerClient?: string) => {
-    const formatArgs = useProgressiveFallback
-      ? ["-f", "18/b[height<=720][ext=mp4]/b[height<=720]"]
-      : ["-S", "res:720,ext:mp4:m4a", "-N", "4"];
+    const formatArgs = getYoutubeMediaFormatArgs(useProgressiveFallback);
     const ytdlp = spawn(
       resourcePaths.ytdlp,
       [

@@ -1,7 +1,35 @@
 import { normalizeRoomId } from "./roomIdCore";
 
 const ROOM_STORAGE_KEY = "karafriends.roomId";
+const RECENT_ROOMS_STORAGE_KEY = "karafriends.recentRooms";
 const REMOTE_TOKEN_STORAGE_KEY = "karafriends.remoteToken";
+const MAX_RECENT_ROOMS = 8;
+
+function rememberRoom(roomId: string): void {
+  let recentRooms: string[] = [];
+  try {
+    const stored = JSON.parse(
+      localStorage.getItem(RECENT_ROOMS_STORAGE_KEY) || "[]",
+    );
+    if (Array.isArray(stored)) {
+      recentRooms = stored.filter(
+        (value): value is string => typeof value === "string",
+      );
+    }
+  } catch {
+    // Replace malformed browser storage with a clean history.
+  }
+
+  localStorage.setItem(
+    RECENT_ROOMS_STORAGE_KEY,
+    JSON.stringify(
+      [roomId, ...recentRooms.filter((value) => value !== roomId)].slice(
+        0,
+        MAX_RECENT_ROOMS,
+      ),
+    ),
+  );
+}
 
 export function getRoomId(): string {
   const url = new URL(window.location.href);
@@ -9,6 +37,7 @@ export function getRoomId(): string {
   const storedRoom = localStorage.getItem(ROOM_STORAGE_KEY);
   const roomId = normalizeRoomId(queryRoom || storedRoom);
   localStorage.setItem(ROOM_STORAGE_KEY, roomId);
+  rememberRoom(roomId);
 
   if (queryRoom !== roomId) {
     url.searchParams.set("room", roomId);

@@ -1,4 +1,10 @@
 .banner {
+  position: fixed;
+  z-index: 900;
+  top: 48px;
+  right: 0;
+  left: 0;
+  box-sizing: border-box;
   display: flex;
   gap: 0.75rem;
   align-items: center;

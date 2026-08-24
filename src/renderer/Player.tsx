@@ -161,11 +161,36 @@ function Player(props: {
                 const loadRemote = () => {
                   if (!videoRef.current) return;
 
-                  hls = new Hls({ maxBufferLength: 90 /* seconds */ });
-                  hls.attachMedia(videoRef.current);
-                  hls.loadSource(
-                    popSong.streamingUrls[popSong.streamingUrlIdx].url,
+                  const streamingUrl =
+                    popSong.streamingUrls[popSong.streamingUrlIdx].url;
+
+                  // Safari, including iPadOS, has a native HLS implementation.
+                  // Feeding it through hls.js instead can leave playback stuck
+                  // buffering on versions without reliable MediaSource support.
+                  if (
+                    videoRef.current.canPlayType(
+                      "application/vnd.apple.mpegurl",
+                    )
+                  ) {
+                    console.log(`Using native HLS for ${popSong.songId}`);
+                    videoRef.current.src = streamingUrl;
+                    return;
+                  }
+
+                  if (Hls.isSupported()) {
+                    console.log(`Using hls.js for ${popSong.songId}`);
+                    hls = new Hls({ maxBufferLength: 90 /* seconds */ });
+                    hls.attachMedia(videoRef.current);
+                    hls.loadSource(streamingUrl);
+                    return;
+                  }
+
+                  // Let the media element make one final attempt on browsers
+                  // whose HLS capability cannot be detected reliably.
+                  console.warn(
+                    `No detected HLS implementation for ${popSong.songId}; trying native playback`,
                   );
+                  videoRef.current.src = streamingUrl;
                 };
 
                 fetch(fileUrl, { method: "HEAD" })

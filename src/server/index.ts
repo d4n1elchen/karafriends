@@ -259,6 +259,11 @@ app.use(
     dotfiles: "deny",
     fallthrough: false,
     index: false,
+    setHeaders: (res) => {
+      // Media files appear asynchronously after a queue-time download. Do not
+      // let Safari retain an earlier missing-file probe for the same pathname.
+      res.setHeader("Cache-Control", "private, no-store");
+    },
   }),
 );
 

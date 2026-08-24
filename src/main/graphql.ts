@@ -42,6 +42,7 @@ import { normalizeMediaCacheSuffix } from "../common/mediaCacheCore";
 import { getNiconicoMetadata } from "../common/niconicoMetadata";
 import { NiconicoSearchResult, searchNiconico } from "../common/niconicoSearch";
 import { normalizeRoomId } from "../common/roomIdCore";
+import { isIPadUserAgent } from "../common/rendererDeviceCore";
 import { getYoutubeMetadataWithYtDlp } from "../common/youtubeMetadata";
 import { youtubeSearchResultHasCaptions } from "../common/youtubeSearchCore";
 import {
@@ -70,6 +71,7 @@ export interface IGraphQLContext {
   };
   room: RoomRuntime;
   isAdmin: boolean;
+  userAgent: string;
 }
 
 interface JoysoundSongParent {
@@ -1328,8 +1330,41 @@ const resolvers = {
     popSong: (
       _: any,
       args: {},
-      { room }: IGraphQLContext,
+      { room, userAgent }: IGraphQLContext,
     ): QueueItem | null => {
+      const nextSong = room.db.songQueue[0];
+      if (
+        nextSong?.__typename === "DamQueueItem" &&
+        isIPadUserAgent(userAgent) &&
+        !isMediaDownloaded(
+          "DAM",
+          nextSong.songId,
+          normalizeMediaCacheSuffix(nextSong.streamingUrlIdx),
+        )
+      ) {
+        console.log(
+          `Holding DAM song ${nextSong.songId} until its iPad-compatible local file is ready`,
+        );
+        if (room.db.currentSong !== null) {
+          room.db.currentSong = null;
+          room.db.currentSongAdhocLyrics = [];
+          room.pubsub.publish(SubscriptionEvent.CurrentSongChanged, {
+            currentSongChanged: null,
+          });
+          room.pubsub.publish(SubscriptionEvent.CurrentSongAdhocLyricsChanged, {
+            currentSongAdhocLyricsChanged: [],
+          });
+          room.pubsub.publish(SubscriptionEvent.QueueChanged, {
+            queueChanged: {
+              currentSong: null,
+              newQueue: room.db.songQueue,
+            },
+          });
+          saveDb(room);
+        }
+        return null;
+      }
+
       const newSong = room.db.songQueue.shift() || null;
 
       room.db.currentSongAdhocLyrics = [];
@@ -1590,6 +1625,7 @@ export function applyGraphQLMiddleware(
           ctx.connectionParams?.adminToken,
           remoconAdminToken,
         ),
+        userAgent: ctx.extra.request.headers["user-agent"] || "",
       }),
     },
     wsServer,
@@ -1677,6 +1713,7 @@ export function applyGraphQLMiddleware(
                 Array.isArray(adminHeader) ? adminHeader[0] : adminHeader,
                 remoconAdminToken,
               ),
+              userAgent: req.headers["user-agent"] || "",
               dataSources: {
                 minsei: new MinseiAPI(minseiCredentialsProvider, {
                   cache: server.cache,

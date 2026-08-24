@@ -77,13 +77,6 @@ function updateMediaSessionMetadata(metadata: MediaMetadataInit) {
   }
 }
 
-function isIPadRenderer(): boolean {
-  return (
-    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
-  );
-}
-
 function Player(props: {
   mics: InputDevice[];
   kuroshiro: KuroshiroSingleton;
@@ -116,7 +109,6 @@ function Player(props: {
   const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pollQueueRef = useRef<() => void>(() => undefined);
   const queueAdvanceInFlightRef = useRef(false);
-  const mediaLoadGenerationRef = useRef(0);
 
   const audioCtx = useRef<AudioContext | null>(null);
   const videoAudioSrc = useRef<MediaElementAudioSourceNode | null>(null);
@@ -129,9 +121,6 @@ function Player(props: {
     const pollQueue = () => {
       if (queueAdvanceInFlightRef.current) return;
       queueAdvanceInFlightRef.current = true;
-      // Cancel any delayed media availability check for the previous song as
-      // soon as it ends or is skipped.
-      mediaLoadGenerationRef.current += 1;
 
       commitMutation<PlayerPopSongMutation>(environment, {
         mutation: popSongMutation,
@@ -141,7 +130,6 @@ function Player(props: {
           if (!videoRef.current) return;
 
           if (popSong) {
-            const mediaLoadGeneration = ++mediaLoadGenerationRef.current;
             // Only reset caption/pitch state when we actually have a song to
             // play; doing it on every empty poll would spam the pitch-shift
             // mutation while idle.
@@ -200,72 +188,45 @@ function Player(props: {
                   videoRef.current.src = streamingUrl;
                 };
 
-                const startPlayback = () => {
-                  if (
-                    !videoRef.current ||
-                    mediaLoadGeneration !== mediaLoadGenerationRef.current
-                  )
-                    return;
+                fetch(fileUrl, { method: "HEAD", cache: "no-store" })
+                  .then((response) => {
+                    if (!videoRef.current) return;
 
-                  props.audio.gain(DAM_GAIN);
-
-                  updateMediaSessionMetadata({
-                    title: popSong.name,
-                    artist: popSong.artistName,
-                  });
-
-                  videoRef.current.play();
-                };
-
-                const checkLocalFile = () => {
-                  if (mediaLoadGeneration !== mediaLoadGenerationRef.current)
-                    return;
-
-                  fetch(fileUrl, { method: "HEAD", cache: "no-store" })
-                    .then((response) => {
-                      if (
-                        !videoRef.current ||
-                        mediaLoadGeneration !== mediaLoadGenerationRef.current
-                      )
-                        return;
-
-                      if (response.ok) {
-                        console.log(`Using local file for ${popSong.songId}`);
-                        videoRef.current.src = fileUrl;
-                        startPlayback();
-                      } else if (isIPadRenderer()) {
-                        console.log(
-                          `Waiting for local DAM file ${popSong.songId} on iPad`,
-                        );
-                        setTimeout(checkLocalFile, 1000);
-                      } else {
-                        console.log(
-                          `Local file for ${popSong.songId} isn't available, using remote`,
-                        );
-                        loadRemote();
-                        startPlayback();
-                      }
-                    })
-                    .catch((error) => {
-                      if (
-                        mediaLoadGeneration !== mediaLoadGenerationRef.current
-                      )
-                        return;
-
-                      console.error(
-                        `Unable to check local DAM file ${popSong.songId}`,
-                        error,
+                    if (response.ok) {
+                      console.log(`Using local file for ${popSong.songId}`);
+                      videoRef.current.src = fileUrl;
+                    } else {
+                      console.log(
+                        `Local file for ${popSong.songId} isn't available, using remote`,
                       );
-                      if (isIPadRenderer()) {
-                        setTimeout(checkLocalFile, 1000);
-                      } else {
-                        loadRemote();
-                        startPlayback();
-                      }
-                    });
-                };
+                      loadRemote();
+                    }
+                    props.audio.gain(DAM_GAIN);
 
-                checkLocalFile();
+                    updateMediaSessionMetadata({
+                      title: popSong.name,
+                      artist: popSong.artistName,
+                    });
+
+                    videoRef.current.play();
+                  })
+                  .catch((error) => {
+                    console.log(
+                      `Local file for ${popSong.songId} isn't available, using remote`,
+                    );
+                    console.error(error);
+
+                    if (!videoRef.current) return;
+                    loadRemote();
+                    props.audio.gain(DAM_GAIN);
+
+                    updateMediaSessionMetadata({
+                      title: popSong.name,
+                      artist: popSong.artistName,
+                    });
+
+                    videoRef.current.play();
+                  });
                 break;
               case "JoysoundQueueItem":
                 setShouldShowPianoRoll(false);
@@ -409,7 +370,6 @@ function Player(props: {
     }
 
     return () => {
-      mediaLoadGenerationRef.current += 1;
       pollQueueRef.current = () => undefined;
       queueAdvanceInFlightRef.current = false;
       if (pollTimeoutRef.current) {

@@ -7,6 +7,7 @@ import {
 } from "./clientError";
 import { getRemoteAccessToken, getRoomId } from "./roomId";
 import { adminRequestHeaders, getAdminAccessToken } from "./adminMode";
+import { isIPadRendererDevice } from "./rendererDeviceCore";
 
 import { createClient } from "graphql-ws";
 import {
@@ -30,6 +31,15 @@ async function fetchQuery(request: RequestParameters, variables: Variables) {
 
   try {
     const remoteToken = getRemoteAccessToken();
+    const rendererDevice = window.location.pathname.startsWith("/renderer")
+      ? isIPadRendererDevice(
+          navigator.userAgent,
+          navigator.platform,
+          navigator.maxTouchPoints,
+        )
+        ? "ipad"
+        : "other"
+      : null;
     const response = await fetch(
       window.karafriends?.isDesktop
         ? `http://localhost:${
@@ -41,6 +51,9 @@ async function fetchQuery(request: RequestParameters, variables: Variables) {
         headers: {
           "Content-Type": "application/json",
           "X-Karafriends-Room": getRoomId(),
+          ...(rendererDevice
+            ? { "X-Karafriends-Renderer-Device": rendererDevice }
+            : {}),
           ...(remoteToken ? { "X-Karafriends-Remote-Token": remoteToken } : {}),
           ...adminRequestHeaders(),
         },

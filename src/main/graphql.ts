@@ -42,7 +42,6 @@ import { normalizeMediaCacheSuffix } from "../common/mediaCacheCore";
 import { getNiconicoMetadata } from "../common/niconicoMetadata";
 import { NiconicoSearchResult, searchNiconico } from "../common/niconicoSearch";
 import { normalizeRoomId } from "../common/roomIdCore";
-import { isIPadUserAgent } from "../common/rendererDeviceCore";
 import { getYoutubeMetadataWithYtDlp } from "../common/youtubeMetadata";
 import { youtubeSearchResultHasCaptions } from "../common/youtubeSearchCore";
 import {
@@ -71,7 +70,6 @@ export interface IGraphQLContext {
   };
   room: RoomRuntime;
   isAdmin: boolean;
-  userAgent: string;
 }
 
 interface JoysoundSongParent {
@@ -349,6 +347,7 @@ export interface RoomRuntime {
   dbPath: string;
   pubsub: PubSub;
   remoteToken: string;
+  requiresDownloadedDam: boolean;
 }
 
 function publishMediaDownloadCompleted(
@@ -404,6 +403,7 @@ export function getRoom(roomIdValue: unknown): RoomRuntime {
     dbPath,
     pubsub: new PubSub(),
     remoteToken: randomBytes(32).toString("base64url"),
+    requiresDownloadedDam: false,
   };
   rooms.set(id, room);
   return room;
@@ -469,9 +469,10 @@ function hasMaxSongsInQueue(
 
   const songsDownloadingByUser: number = room.db.downloadQueue.filter(
     (x) =>
-      // DAM is already present in songQueue while its optional local cache is
-      // downloading, so counting it here would count the same request twice.
-      x.downloadType !== 3 && x.userIdentity.deviceId === userIdentity.deviceId,
+      // Desktop DAM downloads are already represented in songQueue. iPad DAM
+      // downloads wait outside songQueue and must count toward the limit.
+      (x.downloadType !== 3 || room.requiresDownloadedDam) &&
+      x.userIdentity.deviceId === userIdentity.deviceId,
   ).length;
 
   console.log(
@@ -1195,6 +1196,7 @@ const resolvers = {
       }
 
       const pushToHead = args.tryHeadOfQueue && isAdmin;
+      const waitForDownload = room.requiresDownloadedDam;
       console.log(`queueDamSong: pushToHead=${pushToHead}`);
 
       console.log(`Starting offline download of ${queueItem.songId}`);
@@ -1217,11 +1219,19 @@ const resolvers = {
         streamingUrl,
         queueItem.songId,
         mediaSuffix,
-        () =>
-          publishMediaDownloadCompleted("DAM", queueItem.songId, mediaSuffix),
+        () => {
+          publishMediaDownloadCompleted("DAM", queueItem.songId, mediaSuffix);
+          if (waitForDownload) pushSongToQueue(room, queueItem, pushToHead);
+        },
       );
 
-      return pushSongToQueue(room, queueItem, pushToHead);
+      return waitForDownload
+        ? {
+            __typename: "QueueSongInfo",
+            eta: getQueueEta(room),
+            timestamp: queueItem.timestamp,
+          }
+        : pushSongToQueue(room, queueItem, pushToHead);
     },
     queueYoutubeSong: (
       _: any,
@@ -1330,41 +1340,8 @@ const resolvers = {
     popSong: (
       _: any,
       args: {},
-      { room, userAgent }: IGraphQLContext,
+      { room }: IGraphQLContext,
     ): QueueItem | null => {
-      const nextSong = room.db.songQueue[0];
-      if (
-        nextSong?.__typename === "DamQueueItem" &&
-        isIPadUserAgent(userAgent) &&
-        !isMediaDownloaded(
-          "DAM",
-          nextSong.songId,
-          normalizeMediaCacheSuffix(nextSong.streamingUrlIdx),
-        )
-      ) {
-        console.log(
-          `Holding DAM song ${nextSong.songId} until its iPad-compatible local file is ready`,
-        );
-        if (room.db.currentSong !== null) {
-          room.db.currentSong = null;
-          room.db.currentSongAdhocLyrics = [];
-          room.pubsub.publish(SubscriptionEvent.CurrentSongChanged, {
-            currentSongChanged: null,
-          });
-          room.pubsub.publish(SubscriptionEvent.CurrentSongAdhocLyricsChanged, {
-            currentSongAdhocLyricsChanged: [],
-          });
-          room.pubsub.publish(SubscriptionEvent.QueueChanged, {
-            queueChanged: {
-              currentSong: null,
-              newQueue: room.db.songQueue,
-            },
-          });
-          saveDb(room);
-        }
-        return null;
-      }
-
       const newSong = room.db.songQueue.shift() || null;
 
       room.db.currentSongAdhocLyrics = [];
@@ -1625,7 +1602,6 @@ export function applyGraphQLMiddleware(
           ctx.connectionParams?.adminToken,
           remoconAdminToken,
         ),
-        userAgent: ctx.extra.request.headers["user-agent"] || "",
       }),
     },
     wsServer,
@@ -1704,16 +1680,19 @@ export function applyGraphQLMiddleware(
             const innertubeApiInstance = await innertubeApiProvider();
             const roomHeader = req.headers["x-karafriends-room"];
             const adminHeader = req.headers[REMOCON_ADMIN_TOKEN_HEADER];
+            const room = getRoom(
+              Array.isArray(roomHeader) ? roomHeader[0] : roomHeader,
+            );
+            const rendererDevice = req.headers["x-karafriends-renderer-device"];
+            if (rendererDevice === "ipad") room.requiresDownloadedDam = true;
+            if (rendererDevice === "other") room.requiresDownloadedDam = false;
 
             return {
-              room: getRoom(
-                Array.isArray(roomHeader) ? roomHeader[0] : roomHeader,
-              ),
+              room,
               isAdmin: secureEqual(
                 Array.isArray(adminHeader) ? adminHeader[0] : adminHeader,
                 remoconAdminToken,
               ),
-              userAgent: req.headers["user-agent"] || "",
               dataSources: {
                 minsei: new MinseiAPI(minseiCredentialsProvider, {
                   cache: server.cache,

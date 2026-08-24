@@ -107,6 +107,8 @@ function Player(props: {
   const { playbackState, setPlaybackState } = usePlaybackState();
   const { pitchShiftSemis, setPitchShiftSemis } = usePitchShiftSemis();
   const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pollQueueRef = useRef<() => void>(() => undefined);
+  const queueAdvanceInFlightRef = useRef(false);
 
   const audioCtx = useRef<AudioContext | null>(null);
   const videoAudioSrc = useRef<MediaElementAudioSourceNode | null>(null);
@@ -116,11 +118,15 @@ function Player(props: {
   useEffect(() => {
     if (!videoRef.current) return;
 
-    const pollQueue = () =>
+    const pollQueue = () => {
+      if (queueAdvanceInFlightRef.current) return;
+      queueAdvanceInFlightRef.current = true;
+
       commitMutation<PlayerPopSongMutation>(environment, {
         mutation: popSongMutation,
         variables: {},
         onCompleted: ({ popSong }) => {
+          queueAdvanceInFlightRef.current = false;
           if (!videoRef.current) return;
 
           if (popSong) {
@@ -335,7 +341,15 @@ function Player(props: {
             pollTimeoutRef.current = setTimeout(pollQueue, POLL_INTERVAL_MS);
           }
         },
+        onError: (error) => {
+          queueAdvanceInFlightRef.current = false;
+          console.error("Unable to advance the song queue", error);
+          pollTimeoutRef.current = setTimeout(pollQueue, POLL_INTERVAL_MS);
+        },
       });
+    };
+
+    pollQueueRef.current = pollQueue;
 
     videoRef.current.onended = pollQueue;
 
@@ -344,6 +358,8 @@ function Player(props: {
     }
 
     return () => {
+      pollQueueRef.current = () => undefined;
+      queueAdvanceInFlightRef.current = false;
       if (pollTimeoutRef.current) {
         clearTimeout(pollTimeoutRef.current);
 
@@ -367,9 +383,11 @@ function Player(props: {
         setPlaybackState("PLAYING");
         break;
       case "SKIPPING":
-        if (isFinite(videoRef.current.duration))
-          videoRef.current.currentTime = videoRef.current.duration;
-        videoRef.current.play();
+        // WebKit may expose a non-finite duration or clamp a seek to the end
+        // without firing `ended`. Advance directly instead of simulating the
+        // end of playback with currentTime = duration.
+        videoRef.current.pause();
+        pollQueueRef.current();
         break;
     }
   }, [playbackState]);

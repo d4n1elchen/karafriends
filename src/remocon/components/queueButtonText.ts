@@ -1,4 +1,5 @@
 export const DOWNLOADING_TEXT = "Downloading…";
+export const CONVERTING_TEXT = "Converting…";
 
 export function downloadingText(progress: number): string {
   if (progress < 0 || !Number.isFinite(progress)) return DOWNLOADING_TEXT;
@@ -16,6 +17,7 @@ export function polledQueueText(
   if (progress < 0 || !Number.isFinite(progress)) {
     return "Error: download failed";
   }
+  if (progress >= 1) return CONVERTING_TEXT;
   return downloadingText(progress);
 }
 

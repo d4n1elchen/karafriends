@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  CONVERTING_TEXT,
   DOWNLOADING_TEXT,
   downloadingText,
   polledQueueText,
@@ -30,6 +31,17 @@ test("reports a download that vanished before the song was queued", () => {
   assert.equal(
     polledQueueText(true, -1, "Queued — starts in ~5:30"),
     "Queued — starts in ~5:30",
+  );
+});
+
+test("reports Joysound conversion after the source download completes", () => {
+  assert.equal(
+    polledQueueText(false, 1, "Queued — starts in ~5:30"),
+    CONVERTING_TEXT,
+  );
+  assert.equal(
+    polledQueueText(false, 2, "Queued — starts in ~5:30"),
+    CONVERTING_TEXT,
   );
 });
 

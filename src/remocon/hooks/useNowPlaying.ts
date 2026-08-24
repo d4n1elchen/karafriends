@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchQuery, graphql, requestSubscription } from "react-relay";
 
 import environment from "../../common/graphqlEnvironment";
@@ -82,42 +82,54 @@ export default function useNowPlaying() {
   const [currentSong, setCurrentSong] = useState<
     useNowPlayingSubscription$data["currentSongChanged"] | undefined
   >(undefined);
+  const subscriptionRevisionRef = useRef(0);
+  const refreshRequestRef = useRef(0);
 
   useEffect(() => {
-    function handleVisibilityChange() {
-      if (document.hidden) {
-        return;
-      }
+    const refreshCurrentSong = () => {
+      const requestId = ++refreshRequestRef.current;
+      const subscriptionRevision = subscriptionRevisionRef.current;
 
-      fetchQuery<useNowPlayingQuery>(
+      return fetchQuery<useNowPlayingQuery>(
         environment,
         nowPlayingQuery,
-        {}
+        {},
       ).subscribe({
-        next: (response: useNowPlayingQuery$data) =>
-          setCurrentSong(response.currentSong),
+        next: (response: useNowPlayingQuery$data) => {
+          // A subscription event is newer than the snapshot captured by
+          // this request. Applying the response would make the current song
+          // briefly disappear when Safari restores the page or connection.
+          if (
+            requestId !== refreshRequestRef.current ||
+            subscriptionRevision !== subscriptionRevisionRef.current
+          ) {
+            return;
+          }
+          setCurrentSong(response.currentSong);
+        },
       });
+    };
+
+    function handleVisibilityChange() {
+      if (document.hidden) return;
+      refreshCurrentSong();
     }
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    const initialQuery = fetchQuery<useNowPlayingQuery>(
-      environment,
-      nowPlayingQuery,
-      {}
-    ).subscribe({
-      next: (response: useNowPlayingQuery$data) =>
-        setCurrentSong(response.currentSong),
-    });
+    const initialQuery = refreshCurrentSong();
 
     const subscription = requestSubscription<useNowPlayingSubscription>(
       environment,
       {
         subscription: nowPlayingSubscription,
         variables: {},
-        onNext: (response) =>
-          setCurrentSong(response?.currentSongChanged || null),
-      }
+        onNext: (response) => {
+          if (!response) return;
+          subscriptionRevisionRef.current += 1;
+          setCurrentSong(response.currentSongChanged);
+        },
+      },
     );
 
     return () => {

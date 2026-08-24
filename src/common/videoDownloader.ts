@@ -1075,6 +1075,9 @@ function downloadJoysoundDataImpl(
 
   Promise.all([videoDataPromise, songDataPromise])
     .then((values) => {
+      // The source media has finished downloading. Keep the queue item alive
+      // at 100% while ffmpeg transcodes it to the iPad-compatible output.
+      downloadQueueItem.progress = 1;
       const joysoundSongRawData = values[1];
 
       const telopBase64 = joysoundSongRawData.telop;

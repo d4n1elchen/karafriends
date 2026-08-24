@@ -33,11 +33,14 @@ export function readMetadataCache<T>(
   provider: MetadataProvider,
   mediaId: string,
   isMetadata: (value: unknown) => value is T,
+  ttlMs?: number,
 ): CachedMetadata<T> | null {
   try {
     return parseMetadataCache(
       fs.readFileSync(cacheFilename(provider, mediaId), "utf8"),
       isMetadata,
+      Date.now(),
+      ttlMs,
     );
   } catch {
     return null;

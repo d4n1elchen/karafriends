@@ -7,7 +7,7 @@ import environment from "../../../common/graphqlEnvironment";
 import Button from "../Button";
 import {
   DOWNLOADING_TEXT,
-  downloadingText,
+  polledQueueText,
   queuedText,
 } from "../queueButtonText";
 
@@ -105,11 +105,13 @@ const JoysoundQueueButton = ({
           },
         ).subscribe({
           next: (data: JoysoundQueueButtonSongQueuedQuery["response"]) => {
-            if (data.songQueued) {
-              setText(queuedTextRef.current || "Queued");
-            } else {
-              setText(downloadingText(data.videoDownloadProgress.progress));
-            }
+            setText(
+              polledQueueText(
+                data.songQueued,
+                data.videoDownloadProgress.progress,
+                queuedTextRef.current || "Queued",
+              ),
+            );
           },
         });
       }, 1000);

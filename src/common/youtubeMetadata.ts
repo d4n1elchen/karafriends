@@ -3,6 +3,7 @@ import { promisify } from "util";
 
 import { ensureExternalResources, getResourcePaths } from "./externalResources";
 import { readMetadataCache, writeMetadataCache } from "./metadataCache";
+import { YOUTUBE_METADATA_CACHE_TTL_MS } from "./metadataCacheCore";
 import {
   isYoutubeMetadata,
   parseYtDlpMetadata,
@@ -23,7 +24,12 @@ export async function getYoutubeMetadataWithYtDlp(
     throw new Error("Invalid YouTube video ID.");
   }
 
-  const cached = readMetadataCache("youtube", videoId, isYoutubeMetadata);
+  const cached = readMetadataCache(
+    "youtube",
+    videoId,
+    isYoutubeMetadata,
+    YOUTUBE_METADATA_CACHE_TTL_MS,
+  );
   if (cached?.fresh) return cached.metadata;
 
   const existingRequest = inFlightMetadataRequests.get(videoId);

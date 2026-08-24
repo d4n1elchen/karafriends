@@ -7,6 +7,18 @@ export function downloadingText(progress: number): string {
   return `${DOWNLOADING_TEXT} ${percentage}%`;
 }
 
+export function polledQueueText(
+  songQueued: boolean,
+  progress: number,
+  queuedLabel: string,
+): string {
+  if (songQueued) return queuedLabel;
+  if (progress < 0 || !Number.isFinite(progress)) {
+    return "Error: download failed";
+  }
+  return downloadingText(progress);
+}
+
 export function queuedText(etaSeconds: number): string {
   const totalSeconds = Math.max(0, Math.floor(etaSeconds));
   const hours = Math.floor(totalSeconds / 3600);

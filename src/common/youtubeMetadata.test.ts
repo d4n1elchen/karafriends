@@ -5,6 +5,7 @@ import {
   isYoutubeMetadata,
   parseYtDlpMetadata,
 } from "./youtubeMetadataCore.ts";
+import { YOUTUBE_METADATA_CACHE_TTL_MS } from "./metadataCacheCore.ts";
 
 describe("parseYtDlpMetadata", () => {
   it("maps yt-dlp video metadata to the GraphQL shape", () => {
@@ -60,4 +61,8 @@ describe("parseYtDlpMetadata", () => {
 it("validates normalized YouTube metadata before using a disk cache", () => {
   assert.equal(isYoutubeMetadata(parseYtDlpMetadata('{"title":"Song"}')), true);
   assert.equal(isYoutubeMetadata({ title: "Song" }), false);
+});
+
+it("keeps YouTube metadata fresh for 30 days", () => {
+  assert.equal(YOUTUBE_METADATA_CACHE_TTL_MS, 30 * 24 * 60 * 60 * 1000);
 });

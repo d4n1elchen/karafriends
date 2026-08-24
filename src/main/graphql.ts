@@ -31,6 +31,7 @@ import {
   REMOCON_ADMIN_LOGIN_PATH,
   REMOCON_ADMIN_TOKEN_HEADER,
 } from "../common/adminAuthCore";
+import { paginateArray } from "../common/arrayPaginationCore";
 import karafriendsConfig from "../common/config";
 import { debugError } from "../common/debug";
 import {
@@ -906,19 +907,18 @@ const resolvers = {
     ): Connection<SongHistoryItem, string> => {
       const firstInt = args.first || 0;
       const afterInt = args.after ? parseInt(args.after, 10) : 0;
+      const page = paginateArray(room.db.songHistory, afterInt, firstInt);
 
       return {
-        edges: room.db.songHistory
-          .slice(afterInt, firstInt)
-          .map((songHistoryItem, i) => ({
-            node: songHistoryItem,
-            cursor: (firstInt + i).toString(),
-          })),
+        edges: page.items.map(({ item, cursor }) => ({
+          node: item,
+          cursor,
+        })),
         pageInfo: {
           hasPreviousPage: false,
-          hasNextPage: firstInt + afterInt < room.db.songHistory.length,
+          hasNextPage: page.hasNextPage,
           startCursor: "0",
-          endCursor: (firstInt + afterInt).toString(),
+          endCursor: page.endCursor,
         },
       };
     },

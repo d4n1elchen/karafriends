@@ -8,3 +8,14 @@ export function getYoutubeMediaFormatArgs(
     ? ["-f", "18"]
     : ["-f", IPAD_SAFE_YOUTUBE_FORMAT, "-N", "4"];
 }
+
+export function getJoysoundBackgroundFormatArgs(
+  allowIncompatibleVideo: boolean,
+): string[] {
+  return allowIncompatibleVideo
+    ? ["-S", "res:720,ext:mp4", "-f", "bv"]
+    : [
+        "-f",
+        "bv[vcodec^=avc1][height<=720][ext=mp4]/bv[vcodec^=avc1][ext=mp4]",
+      ];
+}

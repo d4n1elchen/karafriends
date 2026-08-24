@@ -19,7 +19,10 @@ import {
   getJoysoundOggPlaytime,
   getJoysoundTelopDuration,
 } from "./joysoundMediaMetadata";
-import { getYoutubeMediaFormatArgs } from "./youtubeMediaFormat";
+import {
+  getJoysoundBackgroundFormatArgs,
+  getYoutubeMediaFormatArgs,
+} from "./youtubeMediaFormat";
 import { getWebDataDirectory, isElectronRuntime } from "./runtimePaths";
 import { SharedDownloadCoordinator } from "./sharedDownloadCore";
 import { getNiconicoYtDlpDownloadArgs } from "./niconicoYtDlpArgs";
@@ -442,7 +445,7 @@ function downloadJoysoundVideoPromise(
   downloadQueueItem: DownloadQueueItem,
   tempFilename: string,
   ffmpegLogFilename: string,
-): Promise<number> {
+): Promise<boolean> {
   return new Promise((resolve, reject) => {
     let songFrames = 0;
 
@@ -483,7 +486,9 @@ function downloadJoysoundVideoPromise(
       if (code === 0) {
         removeVideoDownloadFromQueue(downloadQueue, downloadQueueItem);
 
-        resolve(code);
+        // Joysound's own background is already H.264 and can be stream-copied
+        // when the karaoke audio is added.
+        resolve(false);
       } else {
         console.error(
           `Error downloading Joysound video with ID ${songId}: url=${videoUrl}, code=${code}, signal=${signal}, log=${ffmpegLogFilename}`,
@@ -511,7 +516,8 @@ function downloadJoysoundYoutubeVideoPromise(
   downloadQueueItem: DownloadQueueItem,
   tempFilename: string,
   useEmbeddedFallback = false,
-): Promise<number> {
+  allowIncompatibleVideo = false,
+): Promise<boolean> {
   return new Promise((resolve, reject) => {
     const ytdlpLogFilename = `${TEMP_FOLDER}/yt-${youtubeVideoId}.log`;
     const ytdlpLogStream = fs.createWriteStream(ytdlpLogFilename);
@@ -530,11 +536,8 @@ function downloadJoysoundYoutubeVideoPromise(
         ...getYoutubeYtDlpArgs(
           useEmbeddedFallback ? "web_embedded" : undefined,
         ),
-        "-S",
-        "res:720,ext:mp4",
-        "-f",
-        "bv",
-        "--recode",
+        ...getJoysoundBackgroundFormatArgs(allowIncompatibleVideo),
+        "--remux-video",
         "mp4",
         "-N",
         "4",
@@ -579,7 +582,8 @@ function downloadJoysoundYoutubeVideoPromise(
 
         removeVideoDownloadFromQueue(downloadQueue, downloadQueueItem);
 
-        resolve(code);
+        // Non-AVC fallback streams still need the full video transcode.
+        resolve(allowIncompatibleVideo);
       } else if (!useEmbeddedFallback) {
         console.warn(
           `Default yt-dlp clients failed for ${youtubeVideoId}; retrying with web_embedded`,
@@ -591,6 +595,22 @@ function downloadJoysoundYoutubeVideoPromise(
             downloadQueue,
             downloadQueueItem,
             tempFilename,
+            true,
+            false,
+          ),
+        );
+      } else if (!allowIncompatibleVideo) {
+        console.warn(
+          `No H.264 YouTube background was available for ${youtubeVideoId}; falling back to a full video transcode`,
+        );
+        resolve(
+          downloadJoysoundYoutubeVideoPromise(
+            songId,
+            youtubeVideoId,
+            downloadQueue,
+            downloadQueueItem,
+            tempFilename,
+            true,
             true,
           ),
         );
@@ -612,6 +632,7 @@ function composeJoysoundVideoPromise(
   tempFilename: string,
   videoFilename: string,
   ffmpegLogFilename: string,
+  transcodeVideo: boolean,
 ): Promise<JoysoundVideoData> {
   return new Promise((resolve, reject) => {
     let videoPlaytime = 0;
@@ -623,15 +644,12 @@ function composeJoysoundVideoPromise(
       tempFilename,
       "-i",
       "-",
-      // Safari on iPad does not support Joysound's Vorbis audio in an MP4,
-      // and YouTube backgrounds may be AV1. Produce the same broadly
-      // compatible codec combination used by DAM and Niconico.
-      "-c:v",
-      "libx264",
-      "-preset",
-      "veryfast",
-      "-pix_fmt",
-      "yuv420p",
+      // Safari on iPad does not support Joysound's Vorbis audio in MP4. Copy
+      // H.264 backgrounds directly; only the rare non-AVC fallback requires
+      // a full video transcode.
+      ...(transcodeVideo
+        ? ["-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p"]
+        : ["-c:v", "copy"]),
       "-c:a",
       "aac",
       "-ac",
@@ -1078,6 +1096,7 @@ function downloadJoysoundDataImpl(
       // The source media has finished downloading. Keep the queue item alive
       // at 100% while ffmpeg transcodes it to the iPad-compatible output.
       downloadQueueItem.progress = 1;
+      const transcodeVideo = values[0];
       const joysoundSongRawData = values[1];
 
       const telopBase64 = joysoundSongRawData.telop;
@@ -1109,6 +1128,7 @@ function downloadJoysoundDataImpl(
         tempFilename,
         videoFilename,
         ffmpegLogFilename,
+        transcodeVideo,
       );
     })
     .then((data) => {

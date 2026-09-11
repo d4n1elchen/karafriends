@@ -7,7 +7,6 @@ import { debugError, debugLog } from "../common/debug";
 import {
   generateCookieString,
   parseCookies,
-  requireJoysoundSession,
   type JoysoundCookies,
 } from "../common/joysoundCookies";
 
@@ -244,11 +243,7 @@ export class JoysoundAPI extends RESTDataSource {
 
   static async login(email: string, password: string) {
     debugLog("joysound", "Starting login (credentials redacted)");
-    const loginCookies: JoysoundCookies = {
-      AWSALB: "",
-      AWSALBCORS: "",
-      JSESSIONID: "",
-    };
+    const loginCookies: JoysoundCookies = {};
 
     const csrfToken = await fetch("https://www.sound-cafe.jp/login", {
       headers: {
@@ -270,8 +265,6 @@ export class JoysoundAPI extends RESTDataSource {
 
         return matchData[1];
       });
-
-    requireJoysoundSession(loginCookies);
 
     return fetch("https://www.sound-cafe.jp/login/check", {
       method: "POST",
@@ -329,7 +322,6 @@ export class JoysoundAPI extends RESTDataSource {
         );
         invariant(matchData);
 
-        requireJoysoundSession(loginCookies);
         debugLog("joysound", "Login completed successfully");
         return {
           cookies: loginCookies,

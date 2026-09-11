@@ -1,27 +1,19 @@
-const COOKIE_IDS = ["AWSALB", "AWSALBCORS", "JSESSIONID"] as const;
-
-export type JoysoundCookies = Partial<
-  Record<(typeof COOKIE_IDS)[number], string>
->;
+export type JoysoundCookies = Record<string, string>;
 
 export function generateCookieString(cookies: JoysoundCookies): string {
-  return COOKIE_IDS.filter((id) => cookies[id])
-    .map((id) => `${id}=${cookies[id]}`)
+  return Object.entries(cookies)
+    .filter(([, value]) => value)
+    .map(([name, value]) => `${name}=${value}`)
     .join("; ");
 }
 
-// Each response may update only part of the cookie jar, or none of it.
+// Keep all cookies issued by Joysound, including XSRF-TOKEN and any login
+// cookies. A response may update only part of the jar, or none of it.
 export function parseCookies(headers: string[], target: JoysoundCookies): void {
   for (const header of headers) {
     const match = header.match(/^\s*([^=;\s]+)=([^;]*)/);
-    if (!match) continue;
-    const id = COOKIE_IDS.find((name) => name === match[1]);
-    if (id) target[id] = match[2];
-  }
-}
-
-export function requireJoysoundSession(cookies: JoysoundCookies): void {
-  if (!cookies.JSESSIONID) {
-    throw new Error("Joysound login: missing required JSESSIONID cookie");
+    if (!match || ["__proto__", "constructor", "prototype"].includes(match[1]))
+      continue;
+    target[match[1]] = match[2];
   }
 }

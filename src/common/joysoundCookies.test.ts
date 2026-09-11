@@ -3,7 +3,6 @@ import { it } from "node:test";
 import {
   generateCookieString,
   parseCookies,
-  requireJoysoundSession,
   type JoysoundCookies,
 } from "./joysoundCookies.ts";
 
@@ -12,10 +11,9 @@ it("preserves session cookies across partial and empty login responses", () => {
   parseCookies(["JSESSIONID=session; Path=/; HttpOnly"], jar);
   parseCookies(["AWSALB=balancer; Path=/"], jar);
   parseCookies([], jar);
-  requireJoysoundSession(jar);
   assert.equal(
     generateCookieString(jar),
-    "AWSALB=balancer; JSESSIONID=session",
+    "JSESSIONID=session; AWSALB=balancer",
   );
 });
 
@@ -25,7 +23,7 @@ it("accepts cookies without trailing semicolons and replaces rotated sessions", 
   assert.equal(generateCookieString(jar), "JSESSIONID=new=value");
 });
 
-it("handles Expires commas and ignores unrelated cookies and attributes", () => {
+it("handles Expires commas and preserves cookie names but ignores attributes", () => {
   const jar: JoysoundCookies = {};
   parseCookies(
     [
@@ -35,14 +33,30 @@ it("handles Expires commas and ignores unrelated cookies and attributes", () => 
     ],
     jar,
   );
-  assert.deepEqual(jar, { AWSALB: "abc", JSESSIONID: "right" });
+  assert.deepEqual(jar, {
+    AWSALB: "abc",
+    OTHERJSESSIONID: "wrong",
+    JSESSIONID: "right",
+  });
 });
 
-it("reports missing or cleared sessions without exposing cookie values", () => {
-  const jar: JoysoundCookies = { AWSALB: "secret", JSESSIONID: "old" };
+it("omits cleared cookies from subsequent requests", () => {
+  const jar: JoysoundCookies = { AWSALB: "balancer", JSESSIONID: "old" };
   parseCookies(["JSESSIONID=; Max-Age=0"], jar);
-  assert.throws(() => requireJoysoundSession(jar), {
-    message: "Joysound login: missing required JSESSIONID cookie",
-  });
-  assert.equal(generateCookieString(jar), "AWSALB=secret");
+  assert.equal(generateCookieString(jar), "AWSALB=balancer");
+});
+
+it("supports the current login response without JSESSIONID", () => {
+  const jar: JoysoundCookies = {};
+  parseCookies(
+    ["AWSALB=a; Path=/", "AWSALBCORS=b; Path=/", "XSRF-TOKEN=csrf; Path=/"],
+    jar,
+  );
+  parseCookies([], jar);
+  assert.equal(
+    generateCookieString(jar),
+    "AWSALB=a; AWSALBCORS=b; XSRF-TOKEN=csrf",
+  );
+  parseCookies(["SESSION=authenticated; HttpOnly"], jar);
+  assert.equal(jar.SESSION, "authenticated");
 });

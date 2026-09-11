@@ -4,18 +4,17 @@ import promiseRetry from "promise-retry";
 import invariant from "ts-invariant";
 import { debugError, debugLog } from "../common/debug";
 
-const COOKIE_IDS: string[] = ["AWSALB", "AWSALBCORS", "JSESSIONID"];
+import {
+  generateCookieString,
+  parseCookies,
+  requireJoysoundSession,
+  type JoysoundCookies,
+} from "../common/joysoundCookies";
 
 export type JoysoundCredentialsProvider = () => Promise<{
   cookies: JoysoundCookies;
   csrfToken: string;
 }>;
-
-interface JoysoundCookies {
-  AWSALB: string;
-  AWSALBCORS: string;
-  JSESSIONID: string;
-}
 
 interface JoysoundArtistListItem {
   selSongNo: null;
@@ -58,23 +57,6 @@ export interface JoysoundSongRawData {
 
 interface ServiceTypeData {
   serviceType: string;
-}
-
-function generateCookieString(cookies: JoysoundCookies) {
-  return COOKIE_IDS.map(
-    (cookieId) => cookieId + "=" + cookies[cookieId as keyof JoysoundCookies],
-  ).join("; ");
-}
-
-function parseCookies(setCookie: string, target: JoysoundCookies) {
-  for (const cookieId of COOKIE_IDS) {
-    const re = new RegExp(cookieId + "=([^;]+);");
-
-    const matchData = setCookie.match(re);
-    invariant(matchData);
-
-    target[cookieId as keyof JoysoundCookies] = matchData[1];
-  }
 }
 
 function unescapeJoysoundString(str: string) {
@@ -276,10 +258,7 @@ export class JoysoundAPI extends RESTDataSource {
     })
       .then((resp) => {
         debugLog("joysound", `GET /login returned HTTP ${resp.status}`);
-        const setCookie = resp.headers.get("set-cookie");
-        invariant(setCookie);
-
-        parseCookies(setCookie, loginCookies);
+        parseCookies(resp.headers.getSetCookie(), loginCookies);
 
         return resp.text();
       })
@@ -291,6 +270,8 @@ export class JoysoundAPI extends RESTDataSource {
 
         return matchData[1];
       });
+
+    requireJoysoundSession(loginCookies);
 
     return fetch("https://www.sound-cafe.jp/login/check", {
       method: "POST",
@@ -308,10 +289,7 @@ export class JoysoundAPI extends RESTDataSource {
     })
       .then((resp) => {
         debugLog("joysound", `POST /login/check returned HTTP ${resp.status}`);
-        const setCookie = resp.headers.get("set-cookie");
-        invariant(setCookie);
-
-        parseCookies(setCookie, loginCookies);
+        parseCookies(resp.headers.getSetCookie(), loginCookies);
 
         return fetch("https://www.sound-cafe.jp/login", {
           method: "POST",
@@ -329,10 +307,7 @@ export class JoysoundAPI extends RESTDataSource {
       })
       .then((resp) => {
         debugLog("joysound", `POST /login returned HTTP ${resp.status}`);
-        const setCookie = resp.headers.get("set-cookie");
-        invariant(setCookie);
-
-        parseCookies(setCookie, loginCookies);
+        parseCookies(resp.headers.getSetCookie(), loginCookies);
 
         return fetch("https://www.sound-cafe.jp", {
           headers: {
@@ -344,10 +319,7 @@ export class JoysoundAPI extends RESTDataSource {
       })
       .then((resp) => {
         debugLog("joysound", `GET / returned HTTP ${resp.status}`);
-        const setCookie = resp.headers.get("set-cookie");
-        invariant(setCookie);
-
-        parseCookies(setCookie, loginCookies);
+        parseCookies(resp.headers.getSetCookie(), loginCookies);
 
         return resp.text();
       })
@@ -357,6 +329,7 @@ export class JoysoundAPI extends RESTDataSource {
         );
         invariant(matchData);
 
+        requireJoysoundSession(loginCookies);
         debugLog("joysound", "Login completed successfully");
         return {
           cookies: loginCookies,

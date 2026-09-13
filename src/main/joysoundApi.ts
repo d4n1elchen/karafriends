@@ -6,6 +6,7 @@ import { debugError, debugLog } from "../common/debug";
 
 import {
   generateCookieString,
+  joysoundCsrfHeaders,
   parseCookies,
   type JoysoundCookies,
 } from "../common/joysoundCookies";
@@ -127,7 +128,7 @@ export class JoysoundAPI extends RESTDataSource {
           Referer: "https://www.sound-cafe.jp/player",
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/112.0",
-          "X-CSRF-TOKEN": creds.csrfToken,
+          ...joysoundCsrfHeaders(creds.cookies, creds.csrfToken),
         },
       });
       debugLog(
@@ -276,7 +277,7 @@ export class JoysoundAPI extends RESTDataSource {
         Referer: "https:/www.sound-cafe.jp/login",
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/112.0",
-        "X-CSRF-TOKEN": csrfToken,
+        ...joysoundCsrfHeaders(loginCookies, csrfToken),
         "X-Requested-With": "XMLHttpRequest",
       },
     })

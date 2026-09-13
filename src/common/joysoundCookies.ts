@@ -17,3 +17,12 @@ export function parseCookies(headers: string[], target: JoysoundCookies): void {
     target[match[1]] = match[2];
   }
 }
+
+export function joysoundCsrfHeaders(
+  cookies: JoysoundCookies,
+  csrfToken: string,
+): Record<string, string> {
+  return cookies["XSRF-TOKEN"]
+    ? { "X-XSRF-TOKEN": decodeURIComponent(cookies["XSRF-TOKEN"]) }
+    : { "X-CSRF-TOKEN": csrfToken };
+}

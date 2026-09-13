@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "node:test";
 import {
   generateCookieString,
+  joysoundCsrfHeaders,
   parseCookies,
   type JoysoundCookies,
 } from "./joysoundCookies.ts";
@@ -59,4 +60,16 @@ it("supports the current login response without JSESSIONID", () => {
   );
   parseCookies(["SESSION=authenticated; HttpOnly"], jar);
   assert.equal(jar.SESSION, "authenticated");
+});
+
+it("uses the cookie CSRF header instead of the HTML token when available", () => {
+  assert.deepEqual(
+    joysoundCsrfHeaders({ "XSRF-TOKEN": "cookie%3Dvalue" }, "html-token"),
+    {
+      "X-XSRF-TOKEN": "cookie=value",
+    },
+  );
+  assert.deepEqual(joysoundCsrfHeaders({}, "html-token"), {
+    "X-CSRF-TOKEN": "html-token",
+  });
 });
